@@ -15,10 +15,10 @@ contract Attendance {
     event SessionCreated(uint256 sessionId, address creator, uint48 start, uint48 end);
     event SessionAttended(uint256 sessionId, address attendee);
 
-    function createSession(uint48 start, uint48 end) external {
+    function createSession(uint48 start, uint48 end) external returns (uint256 sessionId) {
         if (start >= end) revert();
 
-        uint256 sessionId = sessions.length;
+        sessionId = sessions.length;
         sessions.push(Session(start, end, 0));
         emit SessionCreated(sessionId, msg.sender, start, end);
     }
