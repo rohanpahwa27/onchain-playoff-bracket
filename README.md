@@ -1,66 +1,55 @@
-## Foundry
+# Introduction to Solidity
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Installation
 
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
+Install `foundryup`
+```
+curl -L https://foundry.paradigm.xyz | bash
 ```
 
-### Test
-
-```shell
-$ forge test
+Install foundry toolchain (`forge`, `cast`, `anvil`, `chisel`)
+```
+foundryup
 ```
 
-### Format
+## Create a new project
 
-```shell
-$ forge fmt
+```
+forge init
 ```
 
-### Gas Snapshots
+## Build
 
-```shell
-$ forge snapshot
+Compile contracts to surface build issues.
+```
+forge build
 ```
 
-### Anvil
-
-```shell
-$ anvil
+Format contracts according to the official [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html).
+```
+forge fmt
 ```
 
-### Deploy
+## Deploy
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+Create a CLI account
+```
+cast wallet new
 ```
 
-### Cast
-
-```shell
-$ cast <subcommand>
+Encrypt this CLI account and store within foundry
+```
+cast wallet import --private-key [generated private key] --name [e.g. "dev"]
 ```
 
-### Help
+Send testnet ETH to your CLI account
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+Run a script
+```
+forge script [script contract name] --rpc-url "https://sepolia.base.org" --account [CLI account name] --sender [CLI account address] --broadcast -vvvv
+```
+
+Run a script that verifies deployed contracts
+```
+forge script [script contract name] --rpc-url "https://sepolia.base.org" --account [CLI account name] --sender [CLI account address]  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
 ```
