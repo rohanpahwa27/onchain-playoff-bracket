@@ -3,9 +3,9 @@ pragma solidity ^0.8.13;
 
 contract Attendance {
     struct Session {
-        uint48 start;
-        uint48 end;
-        uint160 totalAttended;
+        uint256 start;
+        uint256 end;
+        uint256 totalAttended;
     }
 
     Session[] public sessions;

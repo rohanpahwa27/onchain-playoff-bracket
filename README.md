@@ -12,22 +12,11 @@ Install foundry toolchain (`forge`, `cast`, `anvil`, `chisel`)
 foundryup
 ```
 
-## Create a new project
-
-```
-forge init
-```
-
 ## Build
 
 Compile contracts to surface build issues.
 ```
 forge build
-```
-
-Format contracts according to the official [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html).
-```
-forge fmt
 ```
 
 ## Deploy
