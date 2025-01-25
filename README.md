@@ -28,17 +28,12 @@ cast wallet new
 
 Encrypt this CLI account and store within foundry
 ```
-cast wallet import --name dev --private-key [generated]
+cast wallet import dev --private-key [generated]
 ```
 
 Send testnet ETH to your CLI account
 
-Run deploy script
-```
-forge script Deploy --rpc-url "https://sepolia.base.org" --account [CLI account name] --sender [CLI account address] --broadcast -vvvv
-```
-
 Run deploy script and verify contracts
 ```
-forge script [script contract name] --rpc-url "https://sepolia.base.org" --account [CLI account name] --sender [CLI account address]  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
+forge script Deploy --rpc-url "https://sepolia.base.org" --account dev --sender [CLI account address]  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
 ```
