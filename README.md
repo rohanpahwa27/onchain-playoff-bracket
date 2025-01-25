@@ -37,3 +37,5 @@ Run deploy script and verify contracts
 ```
 forge script Deploy --rpc-url "https://sepolia.base.org" --account dev --sender [CLI account address]  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
 ```
+
+> Note: Etherscan seems to incorrectly give an error message `"Invalid API Key"` when deploying this exact Attendance contract.
