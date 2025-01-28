@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 contract Attendance {
     struct Session {
-        uint256 start;
-        uint256 end;
+        uint48 start;
+        uint48 end;
         uint256 totalAttended;
     }
 
@@ -15,21 +15,30 @@ contract Attendance {
     event SessionCreated(uint256 sessionId, address creator, uint48 start, uint48 end);
     event SessionAttended(uint256 sessionId, address attendee);
 
+    error InvalidStartEnd(uint48 start, uint48 end);
+    error SessionDoesNotExist(uint256 sessionId, uint256 totalSessions);
+    error HasAttendedSession(uint256 sessionId, address sender);
+
+    function totalSessions() external view returns (uint256) {
+        return sessions.length;
+    }
+
     function createSession(uint48 start, uint48 end) external returns (uint256 sessionId) {
-        if (start >= end) revert();
+        if (start >= end) revert InvalidStartEnd(start, end);
 
         sessionId = sessions.length;
-        sessions.push(Session(start, end, 0));
+        sessions.push(Session({start: start, end: end, totalAttended: 0}));
         emit SessionCreated(sessionId, msg.sender, start, end);
     }
 
     function attendSession(uint256 sessionId) external {
-        if (sessionId > sessions.length - 1) revert();
+        if (sessionId > sessions.length - 1) revert SessionDoesNotExist(sessionId, sessions.length);
 
         Session storage session = sessions[sessionId];
-        if (block.timestamp < session.start || block.timestamp > session.end) revert();
-
-        if (hasAttended[sessionId][msg.sender]) revert();
+        if (block.timestamp < session.start || block.timestamp > session.end) {
+            revert InvalidStartEnd(session.start, session.end);
+        }
+        if (hasAttended[sessionId][msg.sender]) revert HasAttendedSession(sessionId, msg.sender);
 
         hasAttended[sessionId][msg.sender] = true;
         totalAttendence[msg.sender]++;
