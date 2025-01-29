@@ -2,6 +2,8 @@
 
 Last deployed at [`0xd58ab8899132a7add4cc16cc4efef36f655a7359`](https://sepolia.basescan.org/address/0xd58ab8899132a7add4cc16cc4efef36f655a7359#code)
 
+Get Base Sepolia ETH [here](https://p2p-faucet.vercel.app/).
+
 ## Installation
 
 Install `foundryup`
