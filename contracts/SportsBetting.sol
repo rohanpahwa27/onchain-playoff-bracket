@@ -224,4 +224,36 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     {
         return actualWinners.rounds[round].predictions[teamNum];
     }
-} 
+
+    /**
+     * @dev Get all predictions for a player's bracket organized by round
+     * @param player Address of the player
+     * @return result Array of string arrays where each inner array contains teams picked for that round
+     */
+    function getBracketPredictions(address player) external view returns (string[][] memory result) {
+        require(hasSubmitted[player], "Player has not submitted a bracket");
+        
+        // Initialize the result array with 4 inner arrays of appropriate sizes
+        result = new string[][](4);
+        result[0] = new string[](ROUND_1_PREDICTIONS);  // 6 teams
+        result[1] = new string[](ROUND_2_PREDICTIONS);  // 4 teams
+        result[2] = new string[](ROUND_3_PREDICTIONS);  // 2 teams
+        result[3] = new string[](ROUND_4_PREDICTIONS);  // 1 team
+        
+        // Track current index for each round
+        uint256[4] memory currentIndex;
+        
+        // For each round, check each team in roundWinners and see if player predicted it
+        for (uint256 round = 0; round < 4; round++) {
+            string[] memory winners = roundWinners[round];
+            for (uint256 i = 0; i < winners.length; i++) {
+                if (playerPredictions[player].rounds[round].predictions[winners[i]]) {
+                    result[round][currentIndex[round]] = winners[i];
+                    currentIndex[round]++;
+                }
+            }
+        }
+        
+        return result;
+    }
+}
