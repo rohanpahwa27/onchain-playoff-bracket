@@ -1,45 +1,66 @@
-# Introduction to Solidity
+## Foundry
 
-Last deployed at [`0xd58ab8899132a7add4cc16cc4efef36f655a7359`](https://sepolia.basescan.org/address/0xd58ab8899132a7add4cc16cc4efef36f655a7359#code)
+**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
 
-Get Base Sepolia ETH [here](https://p2p-faucet.vercel.app/).
+Foundry consists of:
 
-## Installation
+-   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
+-   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
+-   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
+-   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
 
-Install `foundryup`
-```
-curl -L https://foundry.paradigm.xyz | bash
-```
+## Documentation
 
-Install foundry toolchain (`forge`, `cast`, `anvil`, `chisel`)
-```
-foundryup
-```
+https://book.getfoundry.sh/
 
-## Build
+## Usage
 
-Compile contracts to surface build issues.
-```
-forge build
+### Build
+
+```shell
+$ forge build
 ```
 
-## Deploy
+### Test
 
-Create a CLI account
-```
-cast wallet new
-```
-
-Encrypt this CLI account and store within foundry
-```
-cast wallet import dev --private-key [generated]
+```shell
+$ forge test
 ```
 
-Send testnet ETH to your CLI account
+### Format
 
-Run deploy script and verify contracts
-```
-forge script Deploy --rpc-url "https://sepolia.base.org" --account dev --sender [CLI account address]  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
+```shell
+$ forge fmt
 ```
 
-> Note: Etherscan seems to incorrectly give an error message `"Invalid API Key"` when deploying this exact Attendance contract.
+### Gas Snapshots
+
+```shell
+$ forge snapshot
+```
+
+### Anvil
+
+```shell
+$ anvil
+```
+
+### Deploy
+
+```shell
+$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```
+
+### Cast
+
+```shell
+$ cast <subcommand>
+```
+
+### Help
+
+```shell
+$ forge --help
+$ anvil --help
+$ cast --help
+```
