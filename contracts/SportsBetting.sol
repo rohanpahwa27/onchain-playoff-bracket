@@ -21,6 +21,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     // Actual winners bracket
     Bracket public actualWinners;
 
+    // Add new state variables for tracking players and winners
+    address[] private players;
+    mapping(uint256 => string[]) private roundWinners;
+    mapping(address => bool) private hasSubmitted;
+
     // Events
     event BracketCreated(address indexed player);
     event WinnerUpdated(uint256 indexed round, string teamNum);
@@ -44,7 +49,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      */
     function createBracket(string[] calldata predictions) external nonReentrant {
         // Check if player already submitted
-        if (_hasPredictions(msg.sender)) revert BracketAlreadySubmitted();
+        if (hasSubmitted[msg.sender]) revert BracketAlreadySubmitted();
 
         // Validate predictions length
         if (predictions.length != (ROUND_1_PREDICTIONS + ROUND_2_PREDICTIONS + 
@@ -75,6 +80,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         // Fill Round 4
         playerPredictions[msg.sender].rounds[3].predictions[predictions[currentIndex]] = true;
 
+        // Add player to tracking
+        players.push(msg.sender);
+        hasSubmitted[msg.sender] = true;
+
         emit BracketCreated(msg.sender);
     }
 
@@ -88,6 +97,9 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         
         uint256 roundIndex = round - 1;
         actualWinners.rounds[roundIndex].predictions[teamNum] = true;
+        
+        // Store winner in roundWinners array
+        roundWinners[roundIndex].push(teamNum);
         
         emit WinnerUpdated(round, teamNum);
 
@@ -147,25 +159,51 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @dev Checks if a player has submitted predictions
      */
     function _hasPredictions(address player) private view returns (bool) {
-        string[] memory round1Winners = _getRoundWinners(0);
-        return round1Winners.length > 0;
+        return hasSubmitted[player];
     }
 
     /**
      * @dev Gets all players who have submitted predictions
      */
     function _getPlayers() private view returns (address[] memory) {
-        // Implementation would depend on how you want to track players
-        // This is a placeholder
-        return new address[](0);
+        return players;
     }
 
     /**
      * @dev Gets winners for a specific round
      */
     function _getRoundWinners(uint256 round) private view returns (string[] memory) {
-        // Implementation would depend on how you want to store/retrieve winners
-        // This is a placeholder
-        return new string[](0);
+        return roundWinners[round];
+    }
+
+    // Add new view functions for external queries
+    
+    /**
+     * @dev Get the number of players who have submitted brackets
+     */
+    function getPlayerCount() external view returns (uint256) {
+        return players.length;
+    }
+
+    /**
+     * @dev Get winners for a specific round
+     */
+    function getRoundWinners(uint256 round) external view returns (string[] memory) {
+        require(round < 4, "Invalid round");
+        return roundWinners[round];
+    }
+
+    /**
+     * @dev Check if an address has submitted a bracket
+     */
+    function hasSubmittedBracket(address player) external view returns (bool) {
+        return hasSubmitted[player];
+    }
+
+    /**
+     * @dev Get all players who have submitted brackets
+     */
+    function getAllPlayers() external view returns (address[] memory) {
+        return players;
     }
 } 
