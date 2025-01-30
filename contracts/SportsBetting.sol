@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 contract SportsBetting is Ownable, ReentrancyGuard {
     // Custom struct to represent a round's predictions
     struct RoundPredictions {
-        mapping(string => bool) predictions;
+        string[] teams;
     }
 
     // Bracket struct containing 4 rounds of predictions
@@ -26,6 +26,9 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     mapping(uint256 => string[]) private roundWinners;
     mapping(address => bool) private hasSubmitted;
 
+    // Add state variable to track total pot
+    uint256 private totalPot;
+
     // Events
     event BracketCreated(address indexed player);
     event WinnerUpdated(uint256 indexed round, string teamNum);
@@ -43,13 +46,26 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     uint256 private constant ROUND_3_PREDICTIONS = 2;
     uint256 private constant ROUND_4_PREDICTIONS = 1;
 
+    constructor() {
+        // Initialize empty arrays for each round in actualWinners
+        for(uint i = 0; i < 4; i++) {
+            actualWinners.rounds[i].teams = new string[](0);
+        }
+    }
+
     /**
      * @dev Creates a bracket for the player with their predictions
      * @param predictions Array of team numbers representing predictions
      */
-    function createBracket(string[] calldata predictions) external nonReentrant {
+    function createBracket(string[] calldata predictions) external payable nonReentrant {
         // Check if player already submitted
         if (hasSubmitted[msg.sender]) revert BracketAlreadySubmitted();
+
+        // Check if correct amount was sent
+        require(msg.value == 0.000001 ether, "Must send exactly 0.000001 ETH to submit bracket");
+
+        // Add to total pot
+        totalPot += msg.value;
 
         // Validate predictions length
         if (predictions.length != (ROUND_1_PREDICTIONS + ROUND_2_PREDICTIONS + 
@@ -59,26 +75,32 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
         uint256 currentIndex = 0;
 
+        // Initialize arrays for each round
+        playerPredictions[msg.sender].rounds[0].teams = new string[](ROUND_1_PREDICTIONS);
+        playerPredictions[msg.sender].rounds[1].teams = new string[](ROUND_2_PREDICTIONS);
+        playerPredictions[msg.sender].rounds[2].teams = new string[](ROUND_3_PREDICTIONS);
+        playerPredictions[msg.sender].rounds[3].teams = new string[](ROUND_4_PREDICTIONS);
+
         // Fill Round 1
         for (uint256 i = 0; i < ROUND_1_PREDICTIONS; i++) {
-            playerPredictions[msg.sender].rounds[0].predictions[predictions[currentIndex]] = true;
+            playerPredictions[msg.sender].rounds[0].teams[i] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 2
         for (uint256 i = 0; i < ROUND_2_PREDICTIONS; i++) {
-            playerPredictions[msg.sender].rounds[1].predictions[predictions[currentIndex]] = true;
+            playerPredictions[msg.sender].rounds[1].teams[i] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 3
         for (uint256 i = 0; i < ROUND_3_PREDICTIONS; i++) {
-            playerPredictions[msg.sender].rounds[2].predictions[predictions[currentIndex]] = true;
+            playerPredictions[msg.sender].rounds[2].teams[i] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 4
-        playerPredictions[msg.sender].rounds[3].predictions[predictions[currentIndex]] = true;
+        playerPredictions[msg.sender].rounds[3].teams[0] = predictions[currentIndex];
 
         // Add player to tracking
         players.push(msg.sender);
@@ -88,7 +110,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Updates winner for a specific round
+     * @dev Updates winner for a specific round and pays out winner if final round
      * @param round Round number (1-4)
      * @param teamNum Team number that won
      */
@@ -96,16 +118,22 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         if (round < 1 || round > 4) revert InvalidRound();
         
         uint256 roundIndex = round - 1;
-        actualWinners.rounds[roundIndex].predictions[teamNum] = true;
-        
-        // Store winner in roundWinners array
-        roundWinners[roundIndex].push(teamNum);
+        actualWinners.rounds[roundIndex].teams.push(teamNum);
         
         emit WinnerUpdated(round, teamNum);
 
-        // If final round, calculate winner
+        // If final round, calculate winner and transfer prize
         if (round == 4) {
             (address winner, uint256 score) = calculateWinner();
+            uint256 prize = (totalPot * 90) / 100; // 90% of total pot
+            
+            // Reset total pot before transfer to prevent reentrancy
+            totalPot = 0;
+            
+            // Transfer prize to winner
+            (bool success, ) = payable(winner).call{value: prize}("");
+            require(success, "Failed to send prize to winner");
+            
             emit WinnerDeclared(winner, score);
         }
     }
@@ -142,16 +170,18 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Calculates score for a specific round
      */
-    function _calculateRoundScore(address player, uint256 round) private view returns (uint256) {
+    function _calculateRoundScore(address player, uint256 roundIndex) private view returns (uint256) {
         uint256 score = 0;
-        string[] memory winners = _getRoundWinners(round);
+        string[] memory winners = _getRoundWinners(roundIndex);
+        string[] memory playerTeams = playerPredictions[player].rounds[roundIndex].teams;
 
         for (uint256 i = 0; i < winners.length; i++) {
-            if (playerPredictions[player].rounds[round].predictions[winners[i]]) {
-                score++;
+            for (uint256 j = 0; j < playerTeams.length; j++) {
+                if (keccak256(bytes(winners[i])) == keccak256(bytes(playerTeams[j]))) {
+                    score++;
+                }
             }
         }
-
         return score;
     }
 
@@ -189,15 +219,8 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @dev Get winners for a specific round
      */
     function getRoundWinners(uint256 round) external view returns (string[] memory) {
-        require(round < 4, "Invalid round");
-        return roundWinners[round];
-    }
-
-    /**
-     * @dev Check if an address has submitted a bracket
-     */
-    function hasSubmittedBracket(address player) external view returns (bool) {
-        return hasSubmitted[player];
+        require(round <= 4 && round > 0, "Invalid round");
+        return roundWinners[round-1];
     }
 
     /**
@@ -205,24 +228,6 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      */
     function getAllPlayers() external view returns (address[] memory) {
         return players;
-    }
-
-    // Add a getter function to check predictions
-    function getPrediction(address player, uint256 round, string calldata teamNum) 
-        external 
-        view 
-        returns (bool) 
-    {
-        return playerPredictions[player].rounds[round].predictions[teamNum];
-    }
-
-    // Add getter function for actualWinners
-    function getActualWinner(uint256 round, string calldata teamNum) 
-        external 
-        view 
-        returns (bool) 
-    {
-        return actualWinners.rounds[round].predictions[teamNum];
     }
 
     /**
@@ -233,27 +238,72 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     function getBracketPredictions(address player) external view returns (string[][] memory result) {
         require(hasSubmitted[player], "Player has not submitted a bracket");
         
-        // Initialize the result array with 4 inner arrays of appropriate sizes
         result = new string[][](4);
-        result[0] = new string[](ROUND_1_PREDICTIONS);  // 6 teams
-        result[1] = new string[](ROUND_2_PREDICTIONS);  // 4 teams
-        result[2] = new string[](ROUND_3_PREDICTIONS);  // 2 teams
-        result[3] = new string[](ROUND_4_PREDICTIONS);  // 1 team
         
-        // Track current index for each round
-        uint256[4] memory currentIndex;
-        
-        // For each round, check each team in roundWinners and see if player predicted it
-        for (uint256 round = 0; round < 4; round++) {
-            string[] memory winners = roundWinners[round];
-            for (uint256 i = 0; i < winners.length; i++) {
-                if (playerPredictions[player].rounds[round].predictions[winners[i]]) {
-                    result[round][currentIndex[round]] = winners[i];
-                    currentIndex[round]++;
-                }
-            }
+        for (uint256 roundIndex = 0; roundIndex < 4; roundIndex++) {
+            result[roundIndex] = playerPredictions[player].rounds[roundIndex].teams;
         }
         
         return result;
+    }
+
+    /**
+     * @dev Get current prize pool
+     */
+    function getPrizePool() external view returns (uint256) {
+        return (totalPot * 90) / 100; // 90% of total pot
+    }
+
+    /**
+     * @dev Updates all winners for all rounds at once. Only callable by owner.
+     * @param winners Array of 13 team names representing winners for all rounds
+     */
+    function setAllWinners(string[] calldata winners) external onlyOwner {
+        if (winners.length != 13) revert InvalidPredictionsLength();
+        
+        uint256 currentIndex = 0;
+        
+        // Clear existing winners
+        for (uint256 round = 0; round < 4; round++) {
+            delete roundWinners[round];
+        }
+
+        // Set Round 1 winners (6 teams)
+        for (uint256 i = 0; i < ROUND_1_PREDICTIONS; i++) {
+            actualWinners.rounds[0].teams.push(winners[currentIndex]);
+            roundWinners[0].push(winners[currentIndex]);
+            currentIndex++;
+        }
+
+        // Set Round 2 winners (4 teams)
+        for (uint256 i = 0; i < ROUND_2_PREDICTIONS; i++) {
+            actualWinners.rounds[1].teams.push(winners[currentIndex]);
+            roundWinners[1].push(winners[currentIndex]);
+            currentIndex++;
+        }
+
+        // Set Round 3 winners (2 teams)
+        for (uint256 i = 0; i < ROUND_3_PREDICTIONS; i++) {
+            actualWinners.rounds[2].teams.push(winners[currentIndex]);
+            roundWinners[2].push(winners[currentIndex]);
+            currentIndex++;
+        }
+
+        // Set Round 4 winner (1 team)
+        actualWinners.rounds[3].teams.push(winners[currentIndex]);
+        roundWinners[3].push(winners[currentIndex]);
+
+        // Calculate and distribute prize
+        (address winner, uint256 score) = calculateWinner();
+        uint256 prize = (totalPot * 90) / 100; // 90% of total pot
+        
+        // Reset total pot before transfer to prevent reentrancy
+        totalPot = 0;
+        
+        // Transfer prize to winner
+        (bool success, ) = payable(winner).call{value: prize}("");
+        require(success, "Failed to send prize to winner");
+        
+        emit WinnerDeclared(winner, score);
     }
 }
