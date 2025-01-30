@@ -16,10 +16,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     // Mapping to store player predictions
-    mapping(address => Bracket) public playerPredictions;
+    mapping(address => Bracket) private playerPredictions;
     
     // Actual winners bracket
-    Bracket public actualWinners;
+    Bracket private actualWinners;
 
     // Add new state variables for tracking players and winners
     address[] private players;
@@ -118,11 +118,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     function calculateWinner() public view returns (address winner, uint256 highestScore) {
         highestScore = 0;
 
-        // Iterate through all players
-        address[] memory players = _getPlayers();
+        // Rename players to allPlayers to avoid shadowing
+        address[] memory allPlayers = _getPlayers();
         
-        for (uint256 i = 0; i < players.length; i++) {
-            address player = players[i];
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            address player = allPlayers[i];
             uint256 playerScore = 0;
 
             // Calculate score for each round
@@ -205,5 +205,23 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      */
     function getAllPlayers() external view returns (address[] memory) {
         return players;
+    }
+
+    // Add a getter function to check predictions
+    function getPrediction(address player, uint256 round, string calldata teamNum) 
+        external 
+        view 
+        returns (bool) 
+    {
+        return playerPredictions[player].rounds[round].predictions[teamNum];
+    }
+
+    // Add getter function for actualWinners
+    function getActualWinner(uint256 round, string calldata teamNum) 
+        external 
+        view 
+        returns (bool) 
+    {
+        return actualWinners.rounds[round].predictions[teamNum];
     }
 } 
