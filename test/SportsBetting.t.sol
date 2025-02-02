@@ -141,4 +141,260 @@ contract SportsBettingTest is Test {
         vm.expectRevert("Must send exactly 0.000001 ETH to submit bracket");
         betting.createBracket{value: 0.000002 ether}(predictions);
     }
+
+    function testPauseAndResumeBracketCreation() public {
+        // Test pausing
+        betting.pauseBracketCreation();
+        assertTrue(betting.isBracketCreationPaused());
+
+        // Try to create bracket while paused
+        string[] memory predictions = new string[](13);
+        for(uint i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        vm.prank(alice);
+        vm.expectRevert("Bracket creation is currently paused");
+        betting.createBracket{value: ENTRY_FEE}(predictions);
+
+        // Test resuming
+        betting.resumeBracketCreation();
+        assertFalse(betting.isBracketCreationPaused());
+
+        // Should be able to create bracket now
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions);
+        assertTrue(betting.hasSubmittedBracket(alice));
+    }
+
+    function testRemoveWinner() public {
+        // First add a winner
+        betting.updateWinner(1, "Bills");
+        
+        // Verify winner was added
+        string[] memory winners = betting.getRoundWinners(1);
+        assertEq(winners.length, 1);
+        assertEq(winners[0], "Bills");
+
+        // Remove the winner
+        betting.removeWinner(1, "Bills");
+
+        // Verify winner was removed
+        winners = betting.getRoundWinners(1);
+        assertEq(winners.length, 0);
+    }
+
+    function testGetUserScoreAndAllScores() public {
+        // Create brackets for both players
+        string[] memory alicePredictions = new string[](13);
+        string[] memory bobPredictions = new string[](13);
+        
+        // Set some predictions
+        for(uint i = 0; i < 13; i++) {
+            alicePredictions[i] = "TeamA";
+            bobPredictions[i] = "TeamB";
+        }
+
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(alicePredictions);
+        
+        vm.prank(bob);
+        betting.createBracket{value: ENTRY_FEE}(bobPredictions);
+
+        // Set some winners matching Alice's predictions
+        betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
+        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
+        
+        // Check individual scores
+        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3 points
+        assertEq(betting.getUserScore(bob), 0);
+
+        // Check all scores
+        (address[] memory users, uint256[] memory scores) = betting.getAllScores();
+        assertEq(users.length, 2);
+        assertEq(scores.length, 2);
+        
+        // Find Alice's score in the array
+        bool foundAlice = false;
+        for(uint i = 0; i < users.length; i++) {
+            if(users[i] == alice) {
+                assertEq(scores[i], 3);
+                foundAlice = true;
+                break;
+            }
+        }
+        assertTrue(foundAlice);
+    }
+
+    function testDeleteBracket() public {
+        // Create a bracket first
+        string[] memory predictions = new string[](13);
+        for(uint i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions);
+        
+        // Verify bracket exists
+        assertTrue(betting.hasSubmittedBracket(alice));
+        assertEq(betting.getPlayerCount(), 1);
+
+        // Delete the bracket
+        betting.deleteBracket(alice);
+
+        // Verify bracket was deleted
+        assertFalse(betting.hasSubmittedBracket(alice));
+        assertEq(betting.getPlayerCount(), 0);
+
+        // Try to get predictions for deleted bracket
+        vm.expectRevert("Player has not submitted a bracket");
+        betting.getBracketPredictions(alice);
+    }
+
+    function testUpdateWinnerAndGetRoundWinners() public {
+        // Update winners for different rounds
+        betting.updateWinner(1, "TeamA");
+        betting.updateWinner(1, "TeamB");
+        betting.updateWinner(2, "TeamC");
+        
+        // Check round 1 winners
+        string[] memory round1Winners = betting.getRoundWinners(1);
+        assertEq(round1Winners.length, 2);
+        assertEq(round1Winners[0], "TeamA");
+        assertEq(round1Winners[1], "TeamB");
+
+        // Check round 2 winners
+        string[] memory round2Winners = betting.getRoundWinners(2);
+        assertEq(round2Winners.length, 1);
+        assertEq(round2Winners[0], "TeamC");
+    }
+
+    function testErrorCases() public {
+        // Test invalid round number for getRoundWinners
+        vm.expectRevert("Invalid round");
+        betting.getRoundWinners(0);
+        
+        vm.expectRevert("Invalid round");
+        betting.getRoundWinners(5);
+
+        // Test removing winner from invalid round
+        vm.expectRevert(SportsBetting.InvalidRound.selector);
+        betting.removeWinner(0, "TeamA");
+
+        // Test removing non-existent winner
+        vm.expectRevert("Winner not found in this round");
+        betting.removeWinner(1, "NonExistentTeam");
+
+        // Test getting score for non-existent bracket
+        vm.expectRevert("No bracket found for this address");
+        betting.getUserScore(alice);
+
+        // Test deleting non-existent bracket
+        vm.expectRevert("No bracket found for this address");
+        betting.deleteBracket(alice);
+
+        // Test pausing when already paused
+        betting.pauseBracketCreation();
+        vm.expectRevert("Bracket creation is already paused");
+        betting.pauseBracketCreation();
+
+        // Test resuming when not paused
+        betting.resumeBracketCreation();
+        vm.expectRevert("Bracket creation is not paused");
+        betting.resumeBracketCreation();
+    }
+
+    function testMaximumWinnersPerRound() public {
+        // Test maximum winners for each round
+        // Round 1 should allow 6 winners
+        for(uint i = 1; i <= 6; i++) {
+            betting.updateWinner(1, string(abi.encodePacked("Team", vm.toString(i))));
+        }
+        vm.expectRevert("Maximum winners for this round already set");
+        betting.updateWinner(1, "ExtraTeam");
+
+        // Round 2 should allow 4 winners
+        for(uint i = 1; i <= 4; i++) {
+            betting.updateWinner(2, string(abi.encodePacked("Team", vm.toString(i))));
+        }
+        vm.expectRevert("Maximum winners for this round already set");
+        betting.updateWinner(2, "ExtraTeam");
+
+        // Round 3 should allow 2 winners
+        for(uint i = 1; i <= 2; i++) {
+            betting.updateWinner(3, string(abi.encodePacked("Team", vm.toString(i))));
+        }
+        vm.expectRevert("Maximum winners for this round already set");
+        betting.updateWinner(3, "ExtraTeam");
+
+        // Round 4 should allow 1 winner
+        betting.updateWinner(4, "Team1");
+        vm.expectRevert("Maximum winners for this round already set");
+        betting.updateWinner(4, "ExtraTeam");
+    }
+
+    function testDuplicateWinnerInRound() public {
+        betting.updateWinner(1, "TeamA");
+        vm.expectRevert("Winner already exists in this round");
+        betting.updateWinner(1, "TeamA");
+    }
+
+    function testSetAllWinnersInvalidLength() public {
+        string[] memory invalidWinners = new string[](12); // Should be 13
+        vm.expectRevert(SportsBetting.InvalidPredictionsLength.selector);
+        betting.setAllWinners(invalidWinners);
+    }
+
+    function testRoundSpecificPoints() public {
+        string[] memory predictions = new string[](13);
+        for(uint i = 0; i < 13; i++) {
+            predictions[i] = "TeamA";
+        }
+
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions);
+
+        // Test points for each round
+        betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
+        assertEq(betting.getUserScore(alice), 1);
+
+        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
+        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3
+
+        betting.updateWinner(3, "TeamA"); // Round 3 = 4 points
+        assertEq(betting.getUserScore(alice), 7); // 1 + 2 + 4 = 7
+
+        betting.updateWinner(4, "TeamA"); // Round 4 = 6 points
+        assertEq(betting.getUserScore(alice), 13); // 1 + 2 + 4 + 6 = 13
+    }
+
+    function testOwnerOnlyFunctions() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.deal(nonOwner, 1 ether);
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.updateWinner(1, "TeamA");
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.setAllWinners(new string[](13));
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.removeWinner(1, "TeamA");
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.deleteBracket(alice);
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.pauseBracketCreation();
+
+        vm.prank(nonOwner);
+        vm.expectRevert("Ownable: caller is not the owner");
+        betting.resumeBracketCreation();
+    }
 } 

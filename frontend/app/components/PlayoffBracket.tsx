@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract, useContractRead } from 'wagmi';
 import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi } from '../lib/OnchainPlayoffBracket';
 import { parseEther } from 'viem';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { Transaction, TransactionButton, TransactionStatus, TransactionStatusLabel, TransactionStatusAction } from '@coinbase/onchainkit/transaction';
 import { baseSepolia } from 'viem/chains';
+import BracketScores from './BracketScores';
 
 interface Game {
   id: number;
@@ -44,6 +45,13 @@ export default function PlayoffBracket() {
   const { address } = useAccount();
 
   const { writeContract } = useWriteContract();
+
+  const { data: bracketCreationStatus } = useContractRead({
+    address: onchainPlayoffBracketContract as `0x${string}`,
+    abi: OnchainPlayoffBracketAbi,
+    functionName: 'canCreateNewBracket',
+    watch: true,
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -169,21 +177,62 @@ export default function PlayoffBracket() {
     abi: OnchainPlayoffBracketAbi,
     functionName: 'createBracket',
     args: [formatBracketSelections()],
-    value: parseEther('0.000001')
+    value: parseEther('0.000001'),
+    chain: baseSepolia
   }];
+
+  console.log('Sending transaction with:', {
+    address: onchainPlayoffBracketContract,
+    args: formatBracketSelections(),
+    value: parseEther('0.000001').toString()
+  });
 
   return (
     <div className="flex flex-col items-center p-8">
       <div className="relative flex justify-center w-full gap-16">
-        {/* AFC (Left) Side */}
+        {/* AFC Side */}
         <div className="flex-1">
           <h2 className="text-2xl font-bold mb-8 text-center text-red-600">AFC</h2>
           <div className="flex gap-16">
             {/* Round 1 */}
-            <div className="space-y-8">
-              {games.slice(0, 3).map(game => (
-                <div key={game.id} className="flex items-center">
-                  <div className="border p-2 w-48">
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Wildcard</h3>
+              <div className="space-y-8">
+                {games.slice(0, 3).map(game => (
+                  <div key={game.id} className="flex items-center">
+                    <div className="border p-2 w-48">
+                      <button
+                        className={`w-full p-1 mb-1 ${
+                          selections[game.id - 1] === game.team1
+                            ? 'bg-red-500 text-white'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => handleTeamSelect(game.id, game.team1)}
+                      >
+                        {game.team1}
+                      </button>
+                      <button
+                        className={`w-full p-1 ${
+                          selections[game.id - 1] === game.team2
+                            ? 'bg-red-500 text-white'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => handleTeamSelect(game.id, game.team2)}
+                      >
+                        {game.team2}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Round 2 */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Divisional</h3>
+              <div className="space-y-16">
+                {games.slice(6, 8).map(game => (
+                  <div key={game.id} className="border p-2 w-48">
                     <button
                       className={`w-full p-1 mb-1 ${
                         selections[game.id - 1] === game.team1
@@ -191,8 +240,9 @@ export default function PlayoffBracket() {
                           : 'hover:bg-gray-100'
                       }`}
                       onClick={() => handleTeamSelect(game.id, game.team1)}
+                      disabled={!game.team1}
                     >
-                      {game.team1}
+                      {game.team1 || '---'}
                     </button>
                     <button
                       className={`w-full p-1 ${
@@ -201,72 +251,46 @@ export default function PlayoffBracket() {
                           : 'hover:bg-gray-100'
                       }`}
                       onClick={() => handleTeamSelect(game.id, game.team2)}
+                      disabled={!game.team2}
                     >
-                      {game.team2}
+                      {game.team2 || '---'}
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Round 2 */}
-            <div className="space-y-16">
-              {games.slice(6, 8).map(game => (
-                <div key={game.id} className="border p-2 w-48">
-                  <button
-                    className={`w-full p-1 mb-1 ${
-                      selections[game.id - 1] === game.team1
-                        ? 'bg-red-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team1)}
-                    disabled={!game.team1}
-                  >
-                    {game.team1 || '---'}
-                  </button>
-                  <button
-                    className={`w-full p-1 ${
-                      selections[game.id - 1] === game.team2
-                        ? 'bg-red-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team2)}
-                    disabled={!game.team2}
-                  >
-                    {game.team2 || '---'}
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
             {/* Round 3 */}
-            <div className="self-center">
-              {games.slice(10, 11).map(game => (
-                <div key={game.id} className="border p-2 w-48">
-                  <button
-                    className={`w-full p-1 mb-1 ${
-                      selections[game.id - 1] === game.team1
-                        ? 'bg-red-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team1)}
-                    disabled={!game.team1}
-                  >
-                    {game.team1 || '---'}
-                  </button>
-                  <button
-                    className={`w-full p-1 ${
-                      selections[game.id - 1] === game.team2
-                        ? 'bg-red-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team2)}
-                    disabled={!game.team2}
-                  >
-                    {game.team2 || '---'}
-                  </button>
-                </div>
-              ))}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Conference</h3>
+              <div className="self-center">
+                {games.slice(10, 11).map(game => (
+                  <div key={game.id} className="border p-2 w-48">
+                    <button
+                      className={`w-full p-1 mb-1 ${
+                        selections[game.id - 1] === game.team1
+                          ? 'bg-red-500 text-white'
+                          : 'hover:bg-gray-100'
+                      }`}
+                      onClick={() => handleTeamSelect(game.id, game.team1)}
+                      disabled={!game.team1}
+                    >
+                      {game.team1 || '---'}
+                    </button>
+                    <button
+                      className={`w-full p-1 ${
+                        selections[game.id - 1] === game.team2
+                          ? 'bg-red-500 text-white'
+                          : 'hover:bg-gray-100'
+                      }`}
+                      onClick={() => handleTeamSelect(game.id, game.team2)}
+                      disabled={!game.team2}
+                    >
+                      {game.team2 || '---'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -304,75 +328,16 @@ export default function PlayoffBracket() {
           </div>
         </div>
 
-        {/* NFC (Right) Side */}
+        {/* NFC Side */}
         <div className="flex-1">
           <h2 className="text-2xl font-bold mb-8 text-center text-blue-600">NFC</h2>
           <div className="flex gap-16 justify-end">
             {/* Round 3 */}
-            <div className="self-center">
-              {games.slice(11, 12).map(game => (
-                <div key={game.id} className="border p-2 w-48">
-                  <button
-                    className={`w-full p-1 mb-1 ${
-                      selections[game.id - 1] === game.team1
-                        ? 'bg-blue-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team1)}
-                    disabled={!game.team1}
-                  >
-                    {game.team1 || '---'}
-                  </button>
-                  <button
-                    className={`w-full p-1 ${
-                      selections[game.id - 1] === game.team2
-                        ? 'bg-blue-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team2)}
-                    disabled={!game.team2}
-                  >
-                    {game.team2 || '---'}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Round 2 */}
-            <div className="space-y-16">
-              {games.slice(8, 10).map(game => (
-                <div key={game.id} className="border p-2 w-48">
-                  <button
-                    className={`w-full p-1 mb-1 ${
-                      selections[game.id - 1] === game.team1
-                        ? 'bg-blue-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team1)}
-                    disabled={!game.team1}
-                  >
-                    {game.team1 || '---'}
-                  </button>
-                  <button
-                    className={`w-full p-1 ${
-                      selections[game.id - 1] === game.team2
-                        ? 'bg-blue-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => handleTeamSelect(game.id, game.team2)}
-                    disabled={!game.team2}
-                  >
-                    {game.team2 || '---'}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Round 1 */}
-            <div className="space-y-8">
-              {games.slice(3, 6).map(game => (
-                <div key={game.id} className="flex items-center">
-                  <div className="border p-2 w-48">
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Conference</h3>
+              <div className="self-center">
+                {games.slice(11, 12).map(game => (
+                  <div key={game.id} className="border p-2 w-48">
                     <button
                       className={`w-full p-1 mb-1 ${
                         selections[game.id - 1] === game.team1
@@ -380,8 +345,9 @@ export default function PlayoffBracket() {
                           : 'hover:bg-gray-100'
                       }`}
                       onClick={() => handleTeamSelect(game.id, game.team1)}
+                      disabled={!game.team1}
                     >
-                      {game.team1}
+                      {game.team1 || '---'}
                     </button>
                     <button
                       className={`w-full p-1 ${
@@ -390,12 +356,79 @@ export default function PlayoffBracket() {
                           : 'hover:bg-gray-100'
                       }`}
                       onClick={() => handleTeamSelect(game.id, game.team2)}
+                      disabled={!game.team2}
                     >
-                      {game.team2}
+                      {game.team2 || '---'}
                     </button>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            {/* Round 2 */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Divisional</h3>
+              <div className="space-y-16">
+                {games.slice(8, 10).map(game => (
+                  <div key={game.id} className="border p-2 w-48">
+                    <button
+                      className={`w-full p-1 mb-1 ${
+                        selections[game.id - 1] === game.team1
+                          ? 'bg-blue-500 text-white'
+                          : 'hover:bg-gray-100'
+                      }`}
+                      onClick={() => handleTeamSelect(game.id, game.team1)}
+                      disabled={!game.team1}
+                    >
+                      {game.team1 || '---'}
+                    </button>
+                    <button
+                      className={`w-full p-1 ${
+                        selections[game.id - 1] === game.team2
+                          ? 'bg-blue-500 text-white'
+                          : 'hover:bg-gray-100'
+                      }`}
+                      onClick={() => handleTeamSelect(game.id, game.team2)}
+                      disabled={!game.team2}
+                    >
+                      {game.team2 || '---'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Round 1 */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-center">Wildcard</h3>
+              <div className="space-y-8">
+                {games.slice(3, 6).map(game => (
+                  <div key={game.id} className="flex items-center">
+                    <div className="border p-2 w-48">
+                      <button
+                        className={`w-full p-1 mb-1 ${
+                          selections[game.id - 1] === game.team1
+                            ? 'bg-blue-500 text-white'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => handleTeamSelect(game.id, game.team1)}
+                      >
+                        {game.team1}
+                      </button>
+                      <button
+                        className={`w-full p-1 ${
+                          selections[game.id - 1] === game.team2
+                            ? 'bg-blue-500 text-white'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onClick={() => handleTeamSelect(game.id, game.team2)}
+                      >
+                        {game.team2}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -407,6 +440,13 @@ export default function PlayoffBracket() {
         >
           Connect Wallet
         </ConnectWallet>
+      ) : bracketCreationStatus?.[0] === false ? (
+        <button 
+          className="mt-16 px-6 py-3 bg-gray-500 text-white rounded-lg cursor-not-allowed"
+          disabled
+        >
+          {bracketCreationStatus?.[1] || "Bracket Creation Locked"}
+        </button>
       ) : (
         <Transaction
           chainId={baseSepolia.id}
@@ -426,6 +466,8 @@ export default function PlayoffBracket() {
           </TransactionStatus>
         </Transaction>
       )}
+
+      <BracketScores />
     </div>
   );
 } 

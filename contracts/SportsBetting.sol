@@ -29,10 +29,15 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     // Add state variable to track total pot
     uint256 private totalPot;
 
+    // Add this state variable at the top with other state variables
+    bool public isBracketCreationPaused;
+
     // Events
     event BracketCreated(address indexed player);
     event WinnerUpdated(uint256 indexed round, string teamNum);
     event WinnerDeclared(address winner, uint256 score);
+    event BracketDeleted(address indexed user);
+    event WinnerRemoved(uint256 indexed round, string teamNum);
 
     // Error messages
     error InvalidRound();
@@ -46,6 +51,12 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     uint256 private constant ROUND_3_PREDICTIONS = 2;
     uint256 private constant ROUND_4_PREDICTIONS = 1;
 
+    // Add point constants at the top with other constants
+    uint256 private constant ROUND_1_POINTS = 1;  // Wildcard
+    uint256 private constant ROUND_2_POINTS = 2;  // Divisional
+    uint256 private constant ROUND_3_POINTS = 4;  // Conference
+    uint256 private constant ROUND_4_POINTS = 6;  // Super Bowl
+
     constructor() {
         // Initialize empty arrays for each round in actualWinners
         for(uint i = 0; i < 4; i++) {
@@ -58,6 +69,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @param predictions Array of team numbers representing predictions
      */
     function createBracket(string[] calldata predictions) external payable nonReentrant {
+        require(!isBracketCreationPaused, "Bracket creation is currently paused");
         // Check if player already submitted
         if (hasSubmitted[msg.sender]) revert BracketAlreadySubmitted();
 
@@ -118,7 +130,30 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         if (round < 1 || round > 4) revert InvalidRound();
         
         uint256 roundIndex = round - 1;
+        uint256 maxWinners;
+        if (roundIndex == 0) maxWinners = ROUND_1_PREDICTIONS;
+        else if (roundIndex == 1) maxWinners = ROUND_2_PREDICTIONS;
+        else if (roundIndex == 2) maxWinners = ROUND_3_PREDICTIONS;
+        else maxWinners = ROUND_4_PREDICTIONS;
+        
+        require(roundWinners[roundIndex].length < maxWinners, "Maximum winners for this round already set");
+        
+        // Check duplicates in both arrays
+        string[] memory existingWinners = actualWinners.rounds[roundIndex].teams;
+        for (uint i = 0; i < existingWinners.length; i++) {
+            if (keccak256(bytes(existingWinners[i])) == keccak256(bytes(teamNum))) {
+                revert("Winner already exists in this round");
+            }
+        }
+        
+        for (uint i = 0; i < roundWinners[roundIndex].length; i++) {
+            if (keccak256(bytes(roundWinners[roundIndex][i])) == keccak256(bytes(teamNum))) {
+                revert("Winner already exists in this round");
+            }
+        }
+        
         actualWinners.rounds[roundIndex].teams.push(teamNum);
+        roundWinners[roundIndex].push(teamNum);
         
         emit WinnerUpdated(round, teamNum);
 
@@ -155,11 +190,9 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
             // Calculate score for each round
             for (uint256 round = 0; round < 4; round++) {
-                uint256 roundScore = _calculateRoundScore(player, round);
-                playerScore += roundScore * (round + 1);
+                playerScore += _calculateRoundScore(player, round);
             }
 
-            // Update highest score if necessary
             if (playerScore > highestScore) {
                 highestScore = playerScore;
                 winner = player;
@@ -178,7 +211,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < winners.length; i++) {
             for (uint256 j = 0; j < playerTeams.length; j++) {
                 if (keccak256(bytes(winners[i])) == keccak256(bytes(playerTeams[j]))) {
-                    score++;
+                    // Apply round-specific points
+                    if (roundIndex == 0) score += ROUND_1_POINTS;        // Wildcard
+                    else if (roundIndex == 1) score += ROUND_2_POINTS;   // Divisional
+                    else if (roundIndex == 2) score += ROUND_3_POINTS;   // Conference
+                    else if (roundIndex == 3) score += ROUND_4_POINTS;   // Super Bowl
                 }
             }
         }
@@ -208,6 +245,13 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
     // Add new view functions for external queries
     
+    /**
+     * @dev Check if a user has submitted a bracket
+     */
+    function hasSubmittedBracket(address user) external view returns (bool) {
+        return hasSubmitted[user];
+    }
+
     /**
      * @dev Get the number of players who have submitted brackets
      */
@@ -306,4 +350,102 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         
         emit WinnerDeclared(winner, score);
     }
+
+    function deleteBracket(address user) external onlyOwner {
+        require(hasSubmitted[user], "No bracket found for this address");
+        
+        // Remove from players array
+        for (uint i = 0; i < players.length; i++) {
+            if (players[i] == user) {
+                players[i] = players[players.length - 1];
+                players.pop();
+                break;
+            }
+        }
+        
+        // Clear data
+        delete playerPredictions[user];
+        delete hasSubmitted[user];
+        
+        emit BracketDeleted(user);
+    }
+
+    /**
+     * @dev Get score for a specific user's bracket
+     * @param user Address of the user
+     * @return score Total score for the user's bracket
+     */
+    function getUserScore(address user) external view returns (uint256) {
+        require(hasSubmitted[user], "No bracket found for this address");
+        
+        uint256 score = 0;
+        for (uint256 round = 0; round < 4; round++) {
+            score += _calculateRoundScore(user, round);
+        }
+        return score;
+    }
+
+    /**
+     * @dev Get scores for all submitted brackets
+     * @return users Array of user addresses
+     * @return scores Array of corresponding scores
+     */
+    function getAllScores() external view returns (address[] memory users, uint256[] memory scores) {
+        users = _getPlayers();
+        scores = new uint256[](users.length);
+        
+        for (uint256 i = 0; i < users.length; i++) {
+            uint256 score = 0;
+            for (uint256 round = 0; round < 4; round++) {
+                score += _calculateRoundScore(users[i], round);
+            }
+            scores[i] = score;
+        }
+        
+        return (users, scores);
+    }
+
+    /**
+     * @dev Pauses the creation of new brackets. Only owner can call.
+     */
+    function pauseBracketCreation() external onlyOwner {
+        require(!isBracketCreationPaused, "Bracket creation is already paused");
+        isBracketCreationPaused = true;
+    }
+
+    /**
+     * @dev Resumes the creation of new brackets. Only owner can call.
+     */
+    function resumeBracketCreation() external onlyOwner {
+        require(isBracketCreationPaused, "Bracket creation is not paused");
+        isBracketCreationPaused = false;
+    }
+
+    /**
+     * @dev Removes a winner from a specific round. Only callable by owner.
+     * @param round Round number (1-4)
+     * @param teamNum Team to remove
+     */
+    function removeActualWinner(uint256 round, string calldata teamNum) external onlyOwner {
+        if (round < 1 || round > 4) revert InvalidRound();
+        
+        uint256 roundIndex = round - 1;
+        bool found = false;
+        
+        // Check if winner exists in actualWinners and remove it
+        string[] storage winners = actualWinners.rounds[roundIndex].teams;
+        for (uint i = 0; i < winners.length; i++) {
+            if (keccak256(bytes(winners[i])) == keccak256(bytes(teamNum))) {
+                winners[i] = winners[winners.length - 1];  // Copy last element
+                winners.pop();  // Remove last element
+                found = true;
+                break;
+            }
+        }
+        
+        require(found, "Winner not found in this round");
+        
+        emit WinnerRemoved(round, teamNum);
+    }
+
 }
