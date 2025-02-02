@@ -18,9 +18,6 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     // Mapping to store player predictions
     mapping(address => Bracket) private playerPredictions;
     
-    // Actual winners bracket
-    Bracket private actualWinners;
-
     // Add new state variables for tracking players and winners
     address[] private players;
     mapping(uint256 => string[]) private roundWinners;
@@ -58,10 +55,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     uint256 private constant ROUND_4_POINTS = 6;  // Super Bowl
 
     constructor() {
-        // Initialize empty arrays for each round in actualWinners
-        for(uint i = 0; i < 4; i++) {
-            actualWinners.rounds[i].teams = new string[](0);
-        }
+        // Remove initialization of actualWinners since we don't need it anymore
     }
 
     /**
@@ -138,21 +132,13 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         
         require(roundWinners[roundIndex].length < maxWinners, "Maximum winners for this round already set");
         
-        // Check duplicates in both arrays
-        string[] memory existingWinners = actualWinners.rounds[roundIndex].teams;
-        for (uint i = 0; i < existingWinners.length; i++) {
-            if (keccak256(bytes(existingWinners[i])) == keccak256(bytes(teamNum))) {
-                revert("Winner already exists in this round");
-            }
-        }
-        
+        // Check for duplicates
         for (uint i = 0; i < roundWinners[roundIndex].length; i++) {
             if (keccak256(bytes(roundWinners[roundIndex][i])) == keccak256(bytes(teamNum))) {
                 revert("Winner already exists in this round");
             }
         }
         
-        actualWinners.rounds[roundIndex].teams.push(teamNum);
         roundWinners[roundIndex].push(teamNum);
         
         emit WinnerUpdated(round, teamNum);
@@ -208,14 +194,17 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         string[] memory winners = _getRoundWinners(roundIndex);
         string[] memory playerTeams = playerPredictions[player].rounds[roundIndex].teams;
 
+        // For each winner in this round
         for (uint256 i = 0; i < winners.length; i++) {
+            // Check if player predicted this winner
             for (uint256 j = 0; j < playerTeams.length; j++) {
                 if (keccak256(bytes(winners[i])) == keccak256(bytes(playerTeams[j]))) {
-                    // Apply round-specific points
-                    if (roundIndex == 0) score += ROUND_1_POINTS;        // Wildcard
-                    else if (roundIndex == 1) score += ROUND_2_POINTS;   // Divisional
-                    else if (roundIndex == 2) score += ROUND_3_POINTS;   // Conference
-                    else if (roundIndex == 3) score += ROUND_4_POINTS;   // Super Bowl
+                    // Apply round-specific points (only once per correct winner)
+                    if (roundIndex == 0) score += ROUND_1_POINTS;        // Wildcard = 1 point
+                    else if (roundIndex == 1) score += ROUND_2_POINTS;   // Divisional = 2 points
+                    else if (roundIndex == 2) score += ROUND_3_POINTS;   // Conference = 4 points
+                    else if (roundIndex == 3) score += ROUND_4_POINTS;   // Super Bowl = 6 points
+                    break; // Break inner loop once we find a match
                 }
             }
         }
@@ -314,27 +303,23 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
         // Set Round 1 winners (6 teams)
         for (uint256 i = 0; i < ROUND_1_PREDICTIONS; i++) {
-            actualWinners.rounds[0].teams.push(winners[currentIndex]);
             roundWinners[0].push(winners[currentIndex]);
             currentIndex++;
         }
 
         // Set Round 2 winners (4 teams)
         for (uint256 i = 0; i < ROUND_2_PREDICTIONS; i++) {
-            actualWinners.rounds[1].teams.push(winners[currentIndex]);
             roundWinners[1].push(winners[currentIndex]);
             currentIndex++;
         }
 
         // Set Round 3 winners (2 teams)
         for (uint256 i = 0; i < ROUND_3_PREDICTIONS; i++) {
-            actualWinners.rounds[2].teams.push(winners[currentIndex]);
             roundWinners[2].push(winners[currentIndex]);
             currentIndex++;
         }
 
         // Set Round 4 winner (1 team)
-        actualWinners.rounds[3].teams.push(winners[currentIndex]);
         roundWinners[3].push(winners[currentIndex]);
 
         // Calculate and distribute prize
@@ -426,18 +411,18 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @param round Round number (1-4)
      * @param teamNum Team to remove
      */
-    function removeActualWinner(uint256 round, string calldata teamNum) external onlyOwner {
+    function removeWinner(uint256 round, string calldata teamNum) external onlyOwner {
         if (round < 1 || round > 4) revert InvalidRound();
         
         uint256 roundIndex = round - 1;
         bool found = false;
         
-        // Check if winner exists in actualWinners and remove it
-        string[] storage winners = actualWinners.rounds[roundIndex].teams;
-        for (uint i = 0; i < winners.length; i++) {
-            if (keccak256(bytes(winners[i])) == keccak256(bytes(teamNum))) {
-                winners[i] = winners[winners.length - 1];  // Copy last element
-                winners.pop();  // Remove last element
+        // Remove from roundWinners array
+        string[] storage roundWinnersList = roundWinners[roundIndex];
+        for (uint i = 0; i < roundWinnersList.length; i++) {
+            if (keccak256(bytes(roundWinnersList[i])) == keccak256(bytes(teamNum))) {
+                roundWinnersList[i] = roundWinnersList[roundWinnersList.length - 1];
+                roundWinnersList.pop();
                 found = true;
                 break;
             }

@@ -112,7 +112,9 @@ contract SportsBettingTest is Test {
         // Set winners and trigger payout
         betting.setAllWinners(actualWinners);
 
-        // Verify Bob won and received payment
+        // Calculate expected scores
+        // Bob: Round 1 (6 matches = 6 points) + Round 2 (4 matches = 8 points) + Round 3 (2 matches = 8 points) + Round 4 (1 match = 6 points) = 28 points
+        // Alice: Round 1 (6 matches = 6 points) + Round 2 (2 matches = 4 points) + Round 3 (0 matches = 0 points) + Round 4 (0 matches = 0 points) = 10 points
         assertGt(bob.balance, bobBalanceBefore);
         assertEq(betting.getPrizePool(), 0);
     }
@@ -189,11 +191,17 @@ contract SportsBettingTest is Test {
         string[] memory alicePredictions = new string[](13);
         string[] memory bobPredictions = new string[](13);
         
-        // Set some predictions
-        for(uint i = 0; i < 13; i++) {
-            alicePredictions[i] = "TeamA";
-            bobPredictions[i] = "TeamB";
-        }
+        // Set predictions for Alice - all TeamA
+        for(uint i = 0; i < 6; i++) alicePredictions[i] = "TeamA"; // Round 1
+        for(uint i = 6; i < 10; i++) alicePredictions[i] = "TeamA"; // Round 2
+        for(uint i = 10; i < 12; i++) alicePredictions[i] = "TeamA"; // Round 3
+        alicePredictions[12] = "TeamA"; // Round 4
+
+        // Set predictions for Bob - all TeamB
+        for(uint i = 0; i < 6; i++) bobPredictions[i] = "TeamB"; // Round 1
+        for(uint i = 6; i < 10; i++) bobPredictions[i] = "TeamB"; // Round 2
+        for(uint i = 10; i < 12; i++) bobPredictions[i] = "TeamB"; // Round 3
+        bobPredictions[12] = "TeamB"; // Round 4
 
         vm.prank(alice);
         betting.createBracket{value: ENTRY_FEE}(alicePredictions);
@@ -203,12 +211,13 @@ contract SportsBettingTest is Test {
 
         // Set some winners matching Alice's predictions
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
-        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
-        
-        // Check individual scores
-        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3 points
+        assertEq(betting.getUserScore(alice), 1); // 1 correct winner in Round 1 = 1 point
         assertEq(betting.getUserScore(bob), 0);
 
+        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
+        assertEq(betting.getUserScore(alice), 3); // 1 point from Round 1 + 2 points from Round 2 = 3
+        assertEq(betting.getUserScore(bob), 0);
+        
         // Check all scores
         (address[] memory users, uint256[] memory scores) = betting.getAllScores();
         assertEq(users.length, 2);
@@ -348,25 +357,32 @@ contract SportsBettingTest is Test {
 
     function testRoundSpecificPoints() public {
         string[] memory predictions = new string[](13);
-        for(uint i = 0; i < 13; i++) {
-            predictions[i] = "TeamA";
-        }
+        
+        // Set predictions - all TeamA
+        for(uint i = 0; i < 6; i++) predictions[i] = "TeamA"; // Round 1
+        for(uint i = 6; i < 10; i++) predictions[i] = "TeamA"; // Round 2
+        for(uint i = 10; i < 12; i++) predictions[i] = "TeamA"; // Round 3
+        predictions[12] = "TeamA"; // Round 4
 
         vm.prank(alice);
         betting.createBracket{value: ENTRY_FEE}(predictions);
 
         // Test points for each round
-        betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
-        assertEq(betting.getUserScore(alice), 1);
+        betting.updateWinner(1, "TeamA"); // Round 1 = 1 point per winner
+        assertEq(betting.getUserScore(alice), 1); // 1 correct winner = 1 point
 
-        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
-        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3
+        betting.updateWinner(2, "TeamA"); // Round 2 = 2 points per winner
+        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3 points
 
-        betting.updateWinner(3, "TeamA"); // Round 3 = 4 points
-        assertEq(betting.getUserScore(alice), 7); // 1 + 2 + 4 = 7
+        betting.updateWinner(3, "TeamA"); // Round 3 = 4 points per winner
+        assertEq(betting.getUserScore(alice), 7); // 1 + 2 + 4 = 7 points
 
-        betting.updateWinner(4, "TeamA"); // Round 4 = 6 points
-        assertEq(betting.getUserScore(alice), 13); // 1 + 2 + 4 + 6 = 13
+        betting.updateWinner(4, "TeamA"); // Round 4 = 6 points per winner
+        assertEq(betting.getUserScore(alice), 13); // 1 + 2 + 4 + 6 = 13 points
+
+        // Test multiple winners in a round
+        betting.updateWinner(1, "TeamB"); // Second winner in round 1
+        assertEq(betting.getUserScore(alice), 13); // Score should stay the same since Alice didn't predict TeamB
     }
 
     function testOwnerOnlyFunctions() public {
