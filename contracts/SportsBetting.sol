@@ -433,4 +433,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         emit WinnerRemoved(round, teamNum);
     }
 
+    /**
+     * @dev Check if new brackets can be created
+     */
+    function canCreateNewBracket() external view returns (bool) {
+        return !isBracketCreationPaused && !hasSubmitted[msg.sender];
+    }
+
 }

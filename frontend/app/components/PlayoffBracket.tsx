@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useContractRead } from 'wagmi';
+import { useAccount, useWriteContract, useReadContract, useChainId, useSwitchChain } from 'wagmi';
 import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi } from '../lib/OnchainPlayoffBracket';
-import { parseEther } from 'viem';
+import { parseEther, encodeFunctionData } from 'viem';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { Transaction, TransactionButton, TransactionStatus, TransactionStatusLabel, TransactionStatusAction } from '@coinbase/onchainkit/transaction';
 import { baseSepolia } from 'viem/chains';
@@ -39,25 +39,28 @@ const INITIAL_GAMES: Game[] = [
 ];
 
 export default function PlayoffBracket() {
-  const [mounted, setMounted] = useState(false);
   const [games, setGames] = useState<Game[]>(INITIAL_GAMES);
   const [selections, setSelections] = useState<string[]>(Array(13).fill(''));
   const { address } = useAccount();
 
-  const { writeContract } = useWriteContract();
-
-  const { data: bracketCreationStatus } = useContractRead({
+  const { data: bracketCreationStatus } = useReadContract({
     address: onchainPlayoffBracketContract as `0x${string}`,
     abi: OnchainPlayoffBracketAbi,
-    functionName: 'canCreateNewBracket',
-    watch: true,
+    functionName: 'canCreateNewBracket'
   });
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const { data: hasSubmitted } = useReadContract({
+    address: onchainPlayoffBracketContract as `0x${string}`,
+    abi: OnchainPlayoffBracketAbi,
+    functionName: 'hasSubmittedBracket',
+    args: address ? [address as `0x${string}`] : undefined
+  });
 
-  if (!mounted) return null;
+  const chainId = useChainId()
+  const {switchChain} = useSwitchChain()
+  if (chainId && chainId != baseSepolia.id) {
+      switchChain({chainId: baseSepolia.id})
+  }
 
   const handleTeamSelect = (gameId: number, team: string) => {
     const gameIndex = gameId - 1;
@@ -168,24 +171,19 @@ export default function PlayoffBracket() {
     
     // Super Bowl winner
     bracketSelections.push(selections[12]);
-
+    console.log('Bracket selections:', bracketSelections, bracketSelections.length);
     return bracketSelections;
   };
 
   const calls = [{
-    address: onchainPlayoffBracketContract as `0x${string}`,
-    abi: OnchainPlayoffBracketAbi,
-    functionName: 'createBracket',
-    args: [formatBracketSelections()],
-    value: parseEther('0.000001'),
-    chain: baseSepolia
-  }];
-
-  console.log('Sending transaction with:', {
-    address: onchainPlayoffBracketContract,
-    args: formatBracketSelections(),
-    value: parseEther('0.000001').toString()
-  });
+    to: onchainPlayoffBracketContract, 
+    data: encodeFunctionData({
+        abi: OnchainPlayoffBracketAbi, 
+        functionName: "createBracket", 
+        args: [formatBracketSelections()],
+    }),
+    value: parseEther("0.000001")
+    }]
 
   return (
     <div className="flex flex-col items-center p-8">
@@ -440,23 +438,42 @@ export default function PlayoffBracket() {
         >
           Connect Wallet
         </ConnectWallet>
-      ) : bracketCreationStatus?.[0] === false ? (
+      ) : !bracketCreationStatus ? (
         <button 
           className="mt-16 px-6 py-3 bg-gray-500 text-white rounded-lg cursor-not-allowed"
           disabled
         >
-          {bracketCreationStatus?.[1] || "Bracket Creation Locked"}
+          Bracket Creation Paused
+        </button>
+      ) : hasSubmitted ? (
+        <button 
+          className="mt-16 px-6 py-3 bg-gray-500 text-white rounded-lg cursor-not-allowed"
+          disabled
+        >
+          Bracket Already Submitted
         </button>
       ) : (
         <Transaction
+          isSponsored={false}
           chainId={baseSepolia.id}
           calls={calls}
-          onStatus={(status) => console.log('Transaction status:', status)}
-          onError={(err) => console.log('Transaction error:', err)}
-          onSuccess={(receipt) => console.log('Transaction success:', receipt)}
+          onStatus={(status) => {
+            console.log('Transaction status:', status);
+            console.log('Current selections:', selections);
+            console.log('Selection length:', selections.length);
+            console.log('Empty selections:', selections.filter(s => s === '').length);
+          }}
+          onError={(error) => {
+            console.error('Transaction error:', error);
+            console.error('Current selections:', selections);
+          }}
+          onSuccess={(receipt) => {
+            console.log('Transaction success:', receipt);
+            // Optionally refresh the page or show success message
+          }}
         >
           <TransactionButton 
-            className="mt-16 px-6 py-3 bg-green-500 text-white rounded-lg disabled:opacity-50"
+            className="mt-16 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:hover:bg-green-500"
             disabled={!selections.every(selection => selection !== '')}
             text="Submit Bracket (0.000001 ETH)"
           />
