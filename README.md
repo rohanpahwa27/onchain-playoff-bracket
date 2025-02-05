@@ -51,6 +51,8 @@ $ anvil
 $ forge script Deploy --rpc-url "https://sepolia.base.org" --account onchain-playoff-bracket --sender $WALLET_ADDRESS  --broadcast -vvvv --verify --verifier-url "https://api-sepolia.basescan.org/api" --etherscan-api-key $BASESCAN_API_KEY
 ```
 
+currently used smart contract: https://sepolia.basescan.org/address/0xb2fe96df7d8e2d8dbdddb98cfb76503c7eb43bea#readContract
+
 ### Cast
 
 ```shell
