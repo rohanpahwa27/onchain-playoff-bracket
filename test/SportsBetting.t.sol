@@ -19,13 +19,13 @@ contract SportsBettingTest is Test {
 
     function testCreateBracket() public {
         string[] memory predictions = new string[](13);
-        predictions[0] = "Bills";   // Round 1
+        predictions[0] = "Bills"; // Round 1
         predictions[1] = "Ravens";
         predictions[2] = "Chargers";
         predictions[3] = "Eagles";
         predictions[4] = "Bucs";
         predictions[5] = "Vikings";
-        predictions[6] = "Chiefs";  // Round 2
+        predictions[6] = "Chiefs"; // Round 2
         predictions[7] = "Ravens";
         predictions[8] = "Lions";
         predictions[9] = "Eagles";
@@ -34,14 +34,14 @@ contract SportsBettingTest is Test {
         predictions[12] = "Ravens"; // Round 4
 
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
-        
-        assertTrue(betting.hasSubmittedBracket(alice));
-        assertEq(betting.getPlayerCount(), 1);
-        assertEq(betting.getPrizePool(), (ENTRY_FEE * 90) / 100);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
+
+        assertTrue(betting.hasSubmittedGroupBracket(alice, "TestGroup"));
+        assertEq(betting.getGroupMemberCount("TestGroup"), 1);
+        assertEq(betting.getGroupPrizePool("TestGroup"), (ENTRY_FEE * 90) / 100);
 
         // Verify bracket predictions
-        string[][] memory bracket = betting.getBracketPredictions(alice);
+        string[][] memory bracket = betting.getGroupBracketPredictions(alice, "TestGroup");
         assertEq(bracket[0][0], "Bills");
         assertEq(bracket[0][1], "Ravens");
         assertEq(bracket[1][0], "Chiefs");
@@ -54,22 +54,22 @@ contract SportsBettingTest is Test {
     function testSetAllWinnersAndCalculateWinner() public {
         // Create brackets for both players
         string[] memory alicePredictions = new string[](13);
-        alicePredictions[0] = "Bills";   // Round 1 - 6 teams
+        alicePredictions[0] = "Bills"; // Round 1 - 6 teams
         alicePredictions[1] = "Ravens";
         alicePredictions[2] = "Chargers";
         alicePredictions[3] = "Eagles";
         alicePredictions[4] = "Bucs";
         alicePredictions[5] = "Vikings";
-        alicePredictions[6] = "Bills";   // Round 2 - 4 teams
+        alicePredictions[6] = "Bills"; // Round 2 - 4 teams
         alicePredictions[7] = "Eagles";
         alicePredictions[8] = "Ravens";
         alicePredictions[9] = "Vikings";
-        alicePredictions[10] = "Bills";  // Round 3 - 2 teams
+        alicePredictions[10] = "Bills"; // Round 3 - 2 teams
         alicePredictions[11] = "Ravens";
-        alicePredictions[12] = "Bills";  // Round 4 - 1 team
+        alicePredictions[12] = "Bills"; // Round 4 - 1 team
 
         string[] memory bobPredictions = new string[](13);
-        bobPredictions[0] = "Bills";    // Different predictions for Bob
+        bobPredictions[0] = "Bills"; // Different predictions for Bob
         bobPredictions[1] = "Ravens";
         bobPredictions[2] = "Chiefs";
         bobPredictions[3] = "Eagles";
@@ -85,10 +85,10 @@ contract SportsBettingTest is Test {
 
         // Submit brackets
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(alicePredictions);
+        betting.createBracket{value: ENTRY_FEE}(alicePredictions, "TestGroup", "password123", ENTRY_FEE);
         
         vm.prank(bob);
-        betting.createBracket{value: ENTRY_FEE}(bobPredictions);
+        betting.createBracket{value: ENTRY_FEE}(bobPredictions, "TestGroup", "password123", ENTRY_FEE);
 
         // Set actual winners (matching more with Bob's predictions)
         string[] memory actualWinners = new string[](13);
@@ -109,39 +109,42 @@ contract SportsBettingTest is Test {
         // Record Bob's balance before winning
         uint256 bobBalanceBefore = bob.balance;
 
-        // Set winners and trigger payout
+        // Set winners
         betting.setAllWinners(actualWinners);
+
+        // Manually distribute group prize
+        betting.distributeGroupPrize("TestGroup");
 
         // Calculate expected scores
         // Bob: Round 1 (6 matches = 6 points) + Round 2 (4 matches = 8 points) + Round 3 (2 matches = 8 points) + Round 4 (1 match = 6 points) = 28 points
         // Alice: Round 1 (6 matches = 6 points) + Round 2 (2 matches = 4 points) + Round 3 (0 matches = 0 points) + Round 4 (0 matches = 0 points) = 10 points
         assertGt(bob.balance, bobBalanceBefore);
-        assertEq(betting.getPrizePool(), 0);
+        assertEq(betting.getGroupPrizePool("TestGroup"), 0);
     }
 
     function testCannotSubmitTwice() public {
         string[] memory predictions = new string[](13);
-        for(uint i = 0; i < 13; i++) {
+        for (uint256 i = 0; i < 13; i++) {
             predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
         }
 
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
 
         vm.expectRevert(SportsBetting.BracketAlreadySubmitted.selector);
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
     }
 
     function testIncorrectEntryFee() public {
         string[] memory predictions = new string[](13);
-        for(uint i = 0; i < 13; i++) {
+        for (uint256 i = 0; i < 13; i++) {
             predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
         }
 
         vm.prank(alice);
-        vm.expectRevert("Must send exactly 0.000001 ETH to submit bracket");
-        betting.createBracket{value: 0.000002 ether}(predictions);
+        vm.expectRevert(SportsBetting.IncorrectEntryFeeAmount.selector);
+        betting.createBracket{value: 0.000002 ether}(predictions, "TestGroup", "password123", ENTRY_FEE);
     }
 
     function testPauseAndResumeBracketCreation() public {
@@ -151,13 +154,13 @@ contract SportsBettingTest is Test {
 
         // Try to create bracket while paused
         string[] memory predictions = new string[](13);
-        for(uint i = 0; i < 13; i++) {
+        for (uint256 i = 0; i < 13; i++) {
             predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
         }
 
         vm.prank(alice);
         vm.expectRevert("Bracket creation is currently paused");
-        betting.createBracket{value: ENTRY_FEE}(predictions);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
 
         // Test resuming
         betting.resumeBracketCreation();
@@ -165,8 +168,8 @@ contract SportsBettingTest is Test {
 
         // Should be able to create bracket now
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
-        assertTrue(betting.hasSubmittedBracket(alice));
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
+        assertTrue(betting.hasSubmittedGroupBracket(alice, "TestGroup"));
     }
 
     function testRemoveWinner() public {
@@ -192,41 +195,53 @@ contract SportsBettingTest is Test {
         string[] memory bobPredictions = new string[](13);
         
         // Set predictions for Alice - all TeamA
-        for(uint i = 0; i < 6; i++) alicePredictions[i] = "TeamA"; // Round 1
-        for(uint i = 6; i < 10; i++) alicePredictions[i] = "TeamA"; // Round 2
-        for(uint i = 10; i < 12; i++) alicePredictions[i] = "TeamA"; // Round 3
+        for (uint256 i = 0; i < 6; i++) {
+            alicePredictions[i] = "TeamA";
+        } // Round 1
+        for (uint256 i = 6; i < 10; i++) {
+            alicePredictions[i] = "TeamA";
+        } // Round 2
+        for (uint256 i = 10; i < 12; i++) {
+            alicePredictions[i] = "TeamA";
+        } // Round 3
         alicePredictions[12] = "TeamA"; // Round 4
 
         // Set predictions for Bob - all TeamB
-        for(uint i = 0; i < 6; i++) bobPredictions[i] = "TeamB"; // Round 1
-        for(uint i = 6; i < 10; i++) bobPredictions[i] = "TeamB"; // Round 2
-        for(uint i = 10; i < 12; i++) bobPredictions[i] = "TeamB"; // Round 3
+        for (uint256 i = 0; i < 6; i++) {
+            bobPredictions[i] = "TeamB";
+        } // Round 1
+        for (uint256 i = 6; i < 10; i++) {
+            bobPredictions[i] = "TeamB";
+        } // Round 2
+        for (uint256 i = 10; i < 12; i++) {
+            bobPredictions[i] = "TeamB";
+        } // Round 3
         bobPredictions[12] = "TeamB"; // Round 4
 
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(alicePredictions);
+        betting.createBracket{value: ENTRY_FEE}(alicePredictions, "TestGroup", "password123", ENTRY_FEE);
         
         vm.prank(bob);
-        betting.createBracket{value: ENTRY_FEE}(bobPredictions);
+        betting.createBracket{value: ENTRY_FEE}(bobPredictions, "TestGroup", "password123", ENTRY_FEE);
 
         // Set some winners matching Alice's predictions
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
-        assertEq(betting.getUserScore(alice), 1); // 1 correct winner in Round 1 = 1 point
-        assertEq(betting.getUserScore(bob), 0);
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 1); // 1 correct winner in Round 1 = 1 point
+        assertEq(betting.getGroupUserScore(bob, "TestGroup"), 0);
 
         betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
-        assertEq(betting.getUserScore(alice), 3); // 1 point from Round 1 + 2 points from Round 2 = 3
-        assertEq(betting.getUserScore(bob), 0);
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 3); // 1 point from Round 1 + 2 points from Round 2 = 3
+        assertEq(betting.getGroupUserScore(bob, "TestGroup"), 0);
         
         // Check all scores
-        (address[] memory users, uint256[] memory scores) = betting.getAllScores();
+        (address[] memory users, uint256[] memory scores) = betting.getGroupAllScores("TestGroup");
         assertEq(users.length, 2);
         assertEq(scores.length, 2);
         
         // Find Alice's score in the array
         bool foundAlice = false;
-        for(uint i = 0; i < users.length; i++) {
-            if(users[i] == alice) {
+        for (uint256 i = 0; i < users.length; i++) {
+            if (users[i] == alice) {
                 assertEq(scores[i], 3);
                 foundAlice = true;
                 break;
@@ -235,30 +250,32 @@ contract SportsBettingTest is Test {
         assertTrue(foundAlice);
     }
 
-    function testDeleteBracket() public {
-        // Create a bracket first
+    function testGroupFunctionality() public {
+        // Test group creation and membership
         string[] memory predictions = new string[](13);
-        for(uint i = 0; i < 13; i++) {
+        for (uint256 i = 0; i < 13; i++) {
             predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
         }
 
+        // Test group doesn't exist initially
+        assertFalse(betting.groupExists("TestGroup"));
+
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
-        
-        // Verify bracket exists
-        assertTrue(betting.hasSubmittedBracket(alice));
-        assertEq(betting.getPlayerCount(), 1);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
 
-        // Delete the bracket
-        betting.deleteBracket(alice);
+        // Verify group was created and alice joined
+        assertTrue(betting.groupExists("TestGroup"));
+        assertTrue(betting.hasSubmittedGroupBracket(alice, "TestGroup"));
+        assertEq(betting.getGroupMemberCount("TestGroup"), 1);
 
-        // Verify bracket was deleted
-        assertFalse(betting.hasSubmittedBracket(alice));
-        assertEq(betting.getPlayerCount(), 0);
+        // Test bob joining the same group
+        vm.prank(bob);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
+        assertEq(betting.getGroupMemberCount("TestGroup"), 2);
 
-        // Try to get predictions for deleted bracket
-        vm.expectRevert("Player has not submitted a bracket");
-        betting.getBracketPredictions(alice);
+        // Try to get predictions for alice
+        string[][] memory bracket = betting.getGroupBracketPredictions(alice, "TestGroup");
+        assertEq(bracket[0][0], "team0");
     }
 
     function testUpdateWinnerAndGetRoundWinners() public {
@@ -295,13 +312,9 @@ contract SportsBettingTest is Test {
         vm.expectRevert("Winner not found in this round");
         betting.removeWinner(1, "NonExistentTeam");
 
-        // Test getting score for non-existent bracket
-        vm.expectRevert("No bracket found for this address");
-        betting.getUserScore(alice);
-
-        // Test deleting non-existent bracket
-        vm.expectRevert("No bracket found for this address");
-        betting.deleteBracket(alice);
+        // Test getting score for non-existent group
+        vm.expectRevert("Group does not exist");
+        betting.getGroupUserScore(alice, "NonExistentGroup");
 
         // Test pausing when already paused
         betting.pauseBracketCreation();
@@ -317,21 +330,21 @@ contract SportsBettingTest is Test {
     function testMaximumWinnersPerRound() public {
         // Test maximum winners for each round
         // Round 1 should allow 6 winners
-        for(uint i = 1; i <= 6; i++) {
+        for (uint256 i = 1; i <= 6; i++) {
             betting.updateWinner(1, string(abi.encodePacked("Team", vm.toString(i))));
         }
         vm.expectRevert("Maximum winners for this round already set");
         betting.updateWinner(1, "ExtraTeam");
 
         // Round 2 should allow 4 winners
-        for(uint i = 1; i <= 4; i++) {
+        for (uint256 i = 1; i <= 4; i++) {
             betting.updateWinner(2, string(abi.encodePacked("Team", vm.toString(i))));
         }
         vm.expectRevert("Maximum winners for this round already set");
         betting.updateWinner(2, "ExtraTeam");
 
         // Round 3 should allow 2 winners
-        for(uint i = 1; i <= 2; i++) {
+        for (uint256 i = 1; i <= 2; i++) {
             betting.updateWinner(3, string(abi.encodePacked("Team", vm.toString(i))));
         }
         vm.expectRevert("Maximum winners for this round already set");
@@ -359,30 +372,36 @@ contract SportsBettingTest is Test {
         string[] memory predictions = new string[](13);
         
         // Set predictions - all TeamA
-        for(uint i = 0; i < 6; i++) predictions[i] = "TeamA"; // Round 1
-        for(uint i = 6; i < 10; i++) predictions[i] = "TeamA"; // Round 2
-        for(uint i = 10; i < 12; i++) predictions[i] = "TeamA"; // Round 3
+        for (uint256 i = 0; i < 6; i++) {
+            predictions[i] = "TeamA";
+        } // Round 1
+        for (uint256 i = 6; i < 10; i++) {
+            predictions[i] = "TeamA";
+        } // Round 2
+        for (uint256 i = 10; i < 12; i++) {
+            predictions[i] = "TeamA";
+        } // Round 3
         predictions[12] = "TeamA"; // Round 4
 
         vm.prank(alice);
-        betting.createBracket{value: ENTRY_FEE}(predictions);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "password123", ENTRY_FEE);
 
         // Test points for each round
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point per winner
-        assertEq(betting.getUserScore(alice), 1); // 1 correct winner = 1 point
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 1); // 1 correct winner = 1 point
 
         betting.updateWinner(2, "TeamA"); // Round 2 = 2 points per winner
-        assertEq(betting.getUserScore(alice), 3); // 1 + 2 = 3 points
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 3); // 1 + 2 = 3 points
 
         betting.updateWinner(3, "TeamA"); // Round 3 = 4 points per winner
-        assertEq(betting.getUserScore(alice), 7); // 1 + 2 + 4 = 7 points
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 7); // 1 + 2 + 4 = 7 points
 
         betting.updateWinner(4, "TeamA"); // Round 4 = 6 points per winner
-        assertEq(betting.getUserScore(alice), 13); // 1 + 2 + 4 + 6 = 13 points
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 13); // 1 + 2 + 4 + 6 = 13 points
 
         // Test multiple winners in a round
         betting.updateWinner(1, "TeamB"); // Second winner in round 1
-        assertEq(betting.getUserScore(alice), 13); // Score should stay the same since Alice didn't predict TeamB
+        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 13); // Score should stay the same since Alice didn't predict TeamB
     }
 
     function testOwnerOnlyFunctions() public {
@@ -403,7 +422,7 @@ contract SportsBettingTest is Test {
 
         vm.prank(nonOwner);
         vm.expectRevert("Ownable: caller is not the owner");
-        betting.deleteBracket(alice);
+        betting.distributeGroupPrize("TestGroup");
 
         vm.prank(nonOwner);
         vm.expectRevert("Ownable: caller is not the owner");
@@ -413,4 +432,208 @@ contract SportsBettingTest is Test {
         vm.expectRevert("Ownable: caller is not the owner");
         betting.resumeBracketCreation();
     }
-} 
+
+    function testGroupPasswordValidation() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Create group with alice
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "SecretGroup", "correctPassword", ENTRY_FEE);
+
+        // Bob tries to join with wrong password
+        vm.prank(bob);
+        vm.expectRevert(SportsBetting.InvalidPassword.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "SecretGroup", "wrongPassword", ENTRY_FEE);
+
+        // Bob joins with correct password
+        vm.prank(bob);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "SecretGroup", "correctPassword", ENTRY_FEE);
+
+        assertEq(betting.getGroupMemberCount("SecretGroup"), 2);
+    }
+
+    function testEmptyGroupNameAndPassword() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Test empty group name
+        vm.prank(alice);
+        vm.expectRevert(SportsBetting.EmptyGroupName.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "", "password123", ENTRY_FEE);
+
+        // Test empty password
+        vm.prank(alice);
+        vm.expectRevert(SportsBetting.EmptyPassword.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "TestGroup", "", ENTRY_FEE);
+    }
+
+    function testGroupSizeLimit() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Create 20 users and have them join the same group
+        for (uint256 i = 0; i < 20; i++) {
+            address user = makeAddr(string(abi.encodePacked("user", vm.toString(i))));
+            vm.deal(user, 1 ether);
+            vm.prank(user);
+            betting.createBracket{value: ENTRY_FEE}(predictions, "FullGroup", "password123", ENTRY_FEE);
+        }
+
+        assertEq(betting.getGroupMemberCount("FullGroup"), 20);
+
+        // 21st user should be rejected
+        address user21 = makeAddr("user21");
+        vm.deal(user21, 1 ether);
+        vm.prank(user21);
+        vm.expectRevert(SportsBetting.GroupFull.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "FullGroup", "password123", ENTRY_FEE);
+    }
+
+    function testMultipleGroups() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Alice joins multiple groups
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "Group1", "password1", ENTRY_FEE);
+
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "Group2", "password2", ENTRY_FEE);
+
+        // Verify alice is in both groups
+        assertTrue(betting.hasSubmittedGroupBracket(alice, "Group1"));
+        assertTrue(betting.hasSubmittedGroupBracket(alice, "Group2"));
+
+        // But can't submit twice to same group
+        vm.prank(alice);
+        vm.expectRevert(SportsBetting.BracketAlreadySubmitted.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "Group1", "password1", ENTRY_FEE);
+    }
+
+    function testCustomEntryFees() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        uint256 customFee = 0.0005 ether; // 0.5 milliETH
+
+        // Create group with custom entry fee
+        vm.prank(alice);
+        betting.createBracket{value: customFee}(predictions, "CustomFeeGroup", "password123", customFee);
+
+        // Verify group was created with correct entry fee
+        assertEq(betting.getGroupEntryFee("CustomFeeGroup"), customFee);
+        assertEq(betting.getGroupPrizePool("CustomFeeGroup"), (customFee * 90) / 100);
+
+        // Bob joins with correct fee
+        vm.prank(bob);
+        betting.createBracket{value: customFee}(predictions, "CustomFeeGroup", "password123", customFee);
+
+        assertEq(betting.getGroupMemberCount("CustomFeeGroup"), 2);
+        assertEq(betting.getGroupPrizePool("CustomFeeGroup"), (customFee * 2 * 90) / 100);
+    }
+
+    function testInvalidEntryFees() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Test entry fee of 0
+        vm.prank(alice);
+        vm.expectRevert(SportsBetting.InvalidEntryFee.selector);
+        betting.createBracket{value: 0}(predictions, "ZeroFeeGroup", "password123", 0);
+
+        // Test entry fee above maximum
+        uint256 tooHighFee = 0.002 ether; // Above 0.001 ETH limit
+        vm.prank(alice);
+        vm.expectRevert(SportsBetting.InvalidEntryFee.selector);
+        betting.createBracket{value: tooHighFee}(predictions, "HighFeeGroup", "password123", tooHighFee);
+
+        // Test maximum allowed fee (should work)
+        uint256 maxFee = betting.getMaxEntryFee();
+        vm.prank(alice);
+        betting.createBracket{value: maxFee}(predictions, "MaxFeeGroup", "password123", maxFee);
+
+        assertEq(betting.getGroupEntryFee("MaxFeeGroup"), maxFee);
+    }
+
+    function testWrongEntryFeeForExistingGroup() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        uint256 groupFee = 0.0003 ether;
+
+        // Alice creates group with specific fee
+        vm.prank(alice);
+        betting.createBracket{value: groupFee}(predictions, "FixedFeeGroup", "password123", groupFee);
+
+        // Bob tries to join with wrong fee amount
+        vm.prank(bob);
+        vm.expectRevert(SportsBetting.IncorrectEntryFeeAmount.selector);
+        betting.createBracket{value: ENTRY_FEE}(predictions, "FixedFeeGroup", "password123", ENTRY_FEE);
+
+        // Bob joins with correct fee
+        vm.prank(bob);
+        betting.createBracket{value: groupFee}(predictions, "FixedFeeGroup", "password123", groupFee);
+
+        assertEq(betting.getGroupMemberCount("FixedFeeGroup"), 2);
+    }
+
+    function testGetGroupInfo() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Test non-existent group
+        (bool exists, uint256 entryFee, uint256 memberCount, bool isFull) = betting.getGroupInfo("NonExistentGroup");
+        assertFalse(exists);
+        assertEq(entryFee, 0);
+        assertEq(memberCount, 0);
+        assertFalse(isFull);
+
+        uint256 customFee = 0.0007 ether;
+
+        // Create group and check info
+        vm.prank(alice);
+        betting.createBracket{value: customFee}(predictions, "InfoTestGroup", "password123", customFee);
+
+        (exists, entryFee, memberCount, isFull) = betting.getGroupInfo("InfoTestGroup");
+        assertTrue(exists);
+        assertEq(entryFee, customFee);
+        assertEq(memberCount, 1);
+        assertFalse(isFull);
+
+        // Add more members
+        vm.prank(bob);
+        betting.createBracket{value: customFee}(predictions, "InfoTestGroup", "password123", customFee);
+
+        (exists, entryFee, memberCount, isFull) = betting.getGroupInfo("InfoTestGroup");
+        assertTrue(exists);
+        assertEq(entryFee, customFee);
+        assertEq(memberCount, 2);
+        assertFalse(isFull);
+
+        // Test that anyone can call this function (no password required)
+        address randomUser = makeAddr("randomUser");
+        vm.prank(randomUser);
+        (exists, entryFee, memberCount, isFull) = betting.getGroupInfo("InfoTestGroup");
+        assertTrue(exists);
+        assertEq(entryFee, customFee);
+        assertEq(memberCount, 2);
+        assertFalse(isFull);
+    }
+}
