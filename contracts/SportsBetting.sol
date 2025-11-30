@@ -34,8 +34,8 @@ contract SportsBetting is Ownable {
     // Mapping to track if a player has submitted in a specific group
     mapping(bytes32 => mapping(address => bool)) private groupHasSubmitted;
 
-    // Mapping to track which groups a player belongs to
-    mapping(address => bytes32[]) private playerGroups;
+    // Mapping to store usernames for players in groups
+    mapping(bytes32 => mapping(address => string)) private groupPlayerUsernames;
 
     // Global state variables for round winners (shared across all groups)
     mapping(uint256 => string[]) private roundWinners;
@@ -81,6 +81,7 @@ contract SportsBetting is Ownable {
     error GroupAlreadyExists();
     error EmptyGroupName();
     error EmptyPassword();
+    error EmptyUsername();
     error InvalidEntryFee();
     error IncorrectEntryFeeAmount();
 
@@ -90,7 +91,8 @@ contract SportsBetting is Ownable {
     uint256 private constant ROUND_3_PREDICTIONS = 2;
     uint256 private constant ROUND_4_PREDICTIONS = 1;
     uint256 private constant MAX_GROUP_SIZE = 20;
-    uint256 private constant MAX_ENTRY_FEE = 0.001 ether;
+    uint256 private constant MAX_ENTRY_FEE = 0.1 ether;
+    uint256 private constant DEVELOPER_FEE_PERCENTAGE = 3;
 
     // Add point constants at the top with other constants
     uint256 private constant ROUND_1_POINTS = 1; // Wildcard
@@ -135,13 +137,20 @@ contract SportsBetting is Ownable {
     }
 
     /**
-     * @dev Internal function to create a new group
+     * @dev Creates a new group without requiring bracket submission
+     * @param groupName Name of the group to create
+     * @param password Password for the group
+     * @param entryFee Entry fee for the group
      */
-    function _createGroup(
-        string memory groupName,
-        string memory password,
+    function createGroup(
+        string calldata groupName,
+        string calldata password,
         uint256 entryFee
-    ) private {
+    ) external {
+        // Validate inputs
+        if (bytes(groupName).length == 0) revert EmptyGroupName();
+        if (bytes(password).length == 0) revert EmptyPassword();
+
         bytes32 groupId = _getGroupId(groupName);
 
         require(!groups[groupId].exists, "Exists");
@@ -165,40 +174,24 @@ contract SportsBetting is Ownable {
     }
 
     /**
-     * @dev Creates a new group without requiring bracket submission
-     * @param groupName Name of the group to create
-     * @param password Password for the group
-     * @param entryFee Entry fee for the group
-     */
-    function createGroup(
-        string calldata groupName,
-        string calldata password,
-        uint256 entryFee
-    ) external {
-        // Validate inputs
-        if (bytes(groupName).length == 0) revert EmptyGroupName();
-        if (bytes(password).length == 0) revert EmptyPassword();
-
-        // Create the group using internal function
-        _createGroup(groupName, password, entryFee);
-    }
-
-    /**
      * @dev Creates a bracket for the player within a specific group
      * @param predictions Array of team numbers representing predictions
      * @param groupName Name of the group to join
      * @param password Password for the group
+     * @param username Display name for the player
      */
     function createBracket(
         string[] calldata predictions,
         string calldata groupName,
-        string calldata password
+        string calldata password,
+        string calldata username
     ) external payable {
         require(!isBracketCreationPaused, "Brackets paused");
 
         // Validate inputs
         if (bytes(groupName).length == 0) revert EmptyGroupName();
         if (bytes(password).length == 0) revert EmptyPassword();
+        if (bytes(username).length == 0) revert EmptyUsername();
 
         bytes32 groupId = _getGroupId(groupName);
 
@@ -276,22 +269,11 @@ contract SportsBetting is Ownable {
             0
         ] = predictions[currentIndex];
 
-        // Add player to group if not already a member
-        bool isMember = false;
-        for (uint256 i = 0; i < groups[groupId].members.length; i++) {
-            if (groups[groupId].members[i] == msg.sender) {
-                isMember = true;
-                break;
-            }
-        }
-
-        if (!isMember) {
-            groups[groupId].members.push(msg.sender);
-            playerGroups[msg.sender].push(groupId);
-            emit PlayerJoinedGroup(msg.sender, groupId, groupName);
-        }
+        groups[groupId].members.push(msg.sender);
+        emit PlayerJoinedGroup(msg.sender, groupId, groupName);
 
         groupHasSubmitted[groupId][msg.sender] = true;
+        groupPlayerUsernames[groupId][msg.sender] = username;
 
         emit GroupBracketCreated(msg.sender, groupId, groupName);
     }
@@ -393,7 +375,8 @@ contract SportsBetting is Ownable {
             (address winner, uint256 score) = _calculateGroupWinner(groupId);
             if (winner == address(0)) continue; // No valid winner
 
-            uint256 prize = (groups[groupId].totalPot * 90) / 100;
+            uint256 prize = (groups[groupId].totalPot *
+                (100 - DEVELOPER_FEE_PERCENTAGE)) / 100;
 
             // Reset group pot before transfer
             groups[groupId].totalPot = 0;
@@ -686,17 +669,6 @@ contract SportsBetting is Ownable {
     }
 
     /**
-     * @dev Get group member count
-     */
-    function getGroupMemberCount(
-        string calldata groupName
-    ) external view returns (uint256) {
-        bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "NoGroup");
-        return groups[groupId].members.length;
-    }
-
-    /**
      * @dev Get group prize pool
      */
     function getGroupPrizePool(
@@ -704,7 +676,8 @@ contract SportsBetting is Ownable {
     ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
-        return (groups[groupId].totalPot * 90) / 100; // 90% of total pot
+        return
+            (groups[groupId].totalPot * (100 - DEVELOPER_FEE_PERCENTAGE)) / 100;
     }
 
     /**
@@ -730,33 +703,20 @@ contract SportsBetting is Ownable {
     }
 
     /**
-     * @dev Get all predictions for a player's bracket in a specific group
+     * @dev Get all data for a group: users, scores, usernames, and predictions
      */
-    function getGroupBracketPredictions(
-        address player,
+    function getGroupData(
         string calldata groupName
-    ) external view returns (string[][] memory result) {
-        bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "NoGroup");
-        require(groupHasSubmitted[groupId][player], "No bracket");
-
-        result = new string[][](4);
-
-        for (uint256 roundIndex = 0; roundIndex < 4; roundIndex++) {
-            result[roundIndex] = groupPlayerPredictions[groupId][player]
-                .rounds[roundIndex]
-                .teams;
-        }
-
-        return result;
-    }
-
-    /**
-     * @dev Get scores for all submitted brackets in a group
-     */
-    function getGroupAllScores(
-        string calldata groupName
-    ) external view returns (address[] memory users, uint256[] memory scores) {
+    )
+        external
+        view
+        returns (
+            address[] memory users,
+            uint256[] memory scores,
+            string[] memory usernames,
+            string[][][] memory allPredictions
+        )
+    {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
 
@@ -772,46 +732,37 @@ contract SportsBetting is Ownable {
 
         users = new address[](submittedCount);
         scores = new uint256[](submittedCount);
+        usernames = new string[](submittedCount);
+        allPredictions = new string[][][](submittedCount);
 
         uint256 index = 0;
         for (uint256 i = 0; i < groupMembers.length; i++) {
-            if (groupHasSubmitted[groupId][groupMembers[i]]) {
-                users[index] = groupMembers[i];
+            address member = groupMembers[i];
+            if (groupHasSubmitted[groupId][member]) {
+                users[index] = member;
+                usernames[index] = groupPlayerUsernames[groupId][member];
 
+                // Calculate score
                 uint256 score = 0;
                 for (uint256 round = 0; round < 4; round++) {
-                    score += _calculateGroupRoundScore(
-                        groupId,
-                        groupMembers[i],
-                        round
-                    );
+                    score += _calculateGroupRoundScore(groupId, member, round);
                 }
                 scores[index] = score;
+
+                // Get predictions
+                string[][] memory memberPredictions = new string[][](4);
+                for (uint256 round = 0; round < 4; round++) {
+                    memberPredictions[round] = groupPlayerPredictions[groupId][
+                        member
+                    ].rounds[round].teams;
+                }
+                allPredictions[index] = memberPredictions;
+
                 index++;
             }
         }
 
-        return (users, scores);
-    }
-
-    /**
-     * @dev Get score for a user in a group
-     */
-    function getGroupUserScore(
-        address user,
-        string calldata groupName
-    ) external view returns (uint256) {
-        bytes32 groupId = _getGroupId(groupName);
-        require(
-            groups[groupId].exists && groupHasSubmitted[groupId][user],
-            "NoData"
-        );
-
-        uint256 score = 0;
-        for (uint256 round = 0; round < 4; round++) {
-            score += _calculateGroupRoundScore(groupId, user, round);
-        }
-        return score;
+        return (users, scores, usernames, allPredictions);
     }
 
     /**
@@ -819,6 +770,24 @@ contract SportsBetting is Ownable {
      */
     function getMaxEntryFee() external pure returns (uint256) {
         return MAX_ENTRY_FEE;
+    }
+
+    /**
+     * @dev Get number of members in a group
+     */
+    function getGroupMemberCount(
+        string calldata groupName
+    ) external view returns (uint256) {
+        bytes32 groupId = _getGroupId(groupName);
+        require(groups[groupId].exists, "NoGroup");
+        return groups[groupId].members.length;
+    }
+
+    /**
+     * @dev Get developer fee percentage
+     */
+    function getDeveloperFeePercentage() external pure returns (uint256) {
+        return DEVELOPER_FEE_PERCENTAGE;
     }
 
     /**
@@ -844,15 +813,6 @@ contract SportsBetting is Ownable {
             memberCount = groups[groupId].members.length;
             isFull = memberCount >= MAX_GROUP_SIZE;
         }
-    }
-
-    /**
-     * @dev Get all groups a player belongs to
-     */
-    function getPlayerGroups(
-        address player
-    ) external view returns (bytes32[] memory) {
-        return playerGroups[player];
     }
 
     /**

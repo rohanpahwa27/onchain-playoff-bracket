@@ -101,3 +101,11 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+
+```
+do you see anything wrong with the implementation of @SportsBetting.sol ?
+
+
+I want to allow someone to create a group using an entry fee, league name, league password. any address can join if they know the league name + password and they have tp provide a username. there should be a group leaderboard where you get the scores of each player. you can also get the group's bracket predictions
+```

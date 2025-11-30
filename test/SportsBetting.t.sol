@@ -41,21 +41,23 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         assertTrue(betting.hasSubmittedGroupBracket(alice, "TestGroup"));
         assertEq(betting.getGroupMemberCount("TestGroup"), 1);
         assertEq(
             betting.getGroupPrizePool("TestGroup"),
-            (ENTRY_FEE * 90) / 100
+            (ENTRY_FEE * 97) / 100
         );
 
         // Verify bracket predictions
-        string[][] memory bracket = betting.getGroupBracketPredictions(
-            alice,
+        // Verify bracket predictions
+        (, , , string[][][] memory allPredictions) = betting.getGroupData(
             "TestGroup"
         );
+        string[][] memory bracket = allPredictions[0];
         assertEq(bracket[0][0], "Bills");
         assertEq(bracket[0][1], "Ravens");
         assertEq(bracket[1][0], "Chiefs");
@@ -106,14 +108,16 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             alicePredictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "Alice"
         );
 
         vm.prank(bob);
         betting.createBracket{value: ENTRY_FEE}(
             bobPredictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "Bob"
         );
 
         // Set actual winners (matching more with Bob's predictions)
@@ -161,7 +165,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         vm.expectRevert(SportsBetting.BracketAlreadySubmitted.selector);
@@ -169,7 +174,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
     }
 
@@ -187,7 +193,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: 0.000002 ether}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
     }
 
@@ -210,7 +217,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Test resuming
@@ -222,7 +230,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
         assertTrue(betting.hasSubmittedGroupBracket(alice, "TestGroup"));
     }
@@ -280,28 +289,57 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             alicePredictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "Alice"
         );
 
         vm.prank(bob);
         betting.createBracket{value: ENTRY_FEE}(
             bobPredictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "Bob"
         );
 
         // Set some winners matching Alice's predictions
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 1); // 1 correct winner in Round 1 = 1 point
-        assertEq(betting.getGroupUserScore(bob, "TestGroup"), 0);
+        (
+            address[] memory users1,
+            uint256[] memory scores1,
+            string[] memory usernames1,
+
+        ) = betting.getGroupData("TestGroup");
+        // Find Alice's and Bob's scores
+        for (uint256 i = 0; i < users1.length; i++) {
+            if (users1[i] == alice) {
+                assertEq(scores1[i], 1); // 1 correct winner in Round 1 = 1 point
+            } else if (users1[i] == bob) {
+                assertEq(scores1[i], 0);
+            }
+        }
 
         betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 3); // 1 point from Round 1 + 2 points from Round 2 = 3
-        assertEq(betting.getGroupUserScore(bob, "TestGroup"), 0);
+        (
+            address[] memory users2,
+            uint256[] memory scores2,
+            string[] memory usernames2,
+
+        ) = betting.getGroupData("TestGroup");
+        for (uint256 i = 0; i < users2.length; i++) {
+            if (users2[i] == alice) {
+                assertEq(scores2[i], 3); // 1 point from Round 1 + 2 points from Round 2 = 3
+            } else if (users2[i] == bob) {
+                assertEq(scores2[i], 0);
+            }
+        }
 
         // Check all scores
-        (address[] memory users, uint256[] memory scores) = betting
-            .getGroupAllScores("TestGroup");
+        (
+            address[] memory users,
+            uint256[] memory scores,
+            string[] memory usernames,
+
+        ) = betting.getGroupData("TestGroup");
         assertEq(users.length, 2);
         assertEq(scores.length, 2);
 
@@ -334,7 +372,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Verify group was created and alice joined
@@ -347,15 +386,18 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
         assertEq(betting.getGroupMemberCount("TestGroup"), 2);
 
         // Try to get predictions for alice
-        string[][] memory bracket = betting.getGroupBracketPredictions(
-            alice,
+        // Try to get predictions for alice
+        (, , , string[][][] memory allPredictions) = betting.getGroupData(
             "TestGroup"
         );
+        // Alice should be first since she joined first
+        string[][] memory bracket = allPredictions[0];
         assertEq(bracket[0][0], "team0");
     }
 
@@ -394,8 +436,8 @@ contract SportsBettingTest is Test {
         betting.removeWinner(1, "NonExistentTeam");
 
         // Test getting score for non-existent group
-        vm.expectRevert("NoData");
-        betting.getGroupUserScore(alice, "NonExistentGroup");
+        vm.expectRevert("NoGroup");
+        betting.getGroupData("NonExistentGroup");
 
         // Test pausing when already paused
         betting.pauseBracketCreation();
@@ -480,25 +522,31 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "TestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Test points for each round
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point per winner
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 1); // 1 correct winner = 1 point
+        (, uint256[] memory scores1, , ) = betting.getGroupData("TestGroup");
+        assertEq(scores1[0], 1); // 1 correct winner = 1 point
 
         betting.updateWinner(2, "TeamA"); // Round 2 = 2 points per winner
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 3); // 1 + 2 = 3 points
+        (, uint256[] memory scores2, , ) = betting.getGroupData("TestGroup");
+        assertEq(scores2[0], 3); // 1 + 2 = 3 points
 
         betting.updateWinner(3, "TeamA"); // Round 3 = 4 points per winner
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 7); // 1 + 2 + 4 = 7 points
+        (, uint256[] memory scores3, , ) = betting.getGroupData("TestGroup");
+        assertEq(scores3[0], 7); // 1 + 2 + 4 = 7 points
 
         betting.updateWinner(4, "TeamA"); // Round 4 = 6 points per winner
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 13); // 1 + 2 + 4 + 6 = 13 points
+        (, uint256[] memory scores4, , ) = betting.getGroupData("TestGroup");
+        assertEq(scores4[0], 13); // 1 + 2 + 4 + 6 = 13 points
 
         // Test multiple winners in a round
         betting.updateWinner(1, "TeamB"); // Second winner in round 1
-        assertEq(betting.getGroupUserScore(alice, "TestGroup"), 13); // Score should stay the same since Alice didn't predict TeamB
+        (, uint256[] memory scores5, , ) = betting.getGroupData("TestGroup");
+        assertEq(scores5[0], 13); // Score should stay the same since Alice didn't predict TeamB
     }
 
     function testOwnerOnlyFunctions() public {
@@ -575,7 +623,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "SecretGroup",
-            "correctPassword"
+            "correctPassword",
+            "TestUser"
         );
 
         // Bob tries to join with wrong password
@@ -584,7 +633,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "SecretGroup",
-            "wrongPassword"
+            "wrongPassword",
+            "TestUser"
         );
 
         // Bob joins with correct password
@@ -592,7 +642,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "SecretGroup",
-            "correctPassword"
+            "correctPassword",
+            "TestUser"
         );
 
         assertEq(betting.getGroupMemberCount("SecretGroup"), 2);
@@ -635,7 +686,8 @@ contract SportsBettingTest is Test {
             betting.createBracket{value: ENTRY_FEE}(
                 predictions,
                 "FullGroup",
-                "password123"
+                "password123",
+                "TestUser"
             );
         }
 
@@ -649,7 +701,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "FullGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
     }
 
@@ -670,14 +723,16 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "Group1",
-            "password1"
+            "password1",
+            "TestUser"
         );
 
         vm.prank(alice);
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "Group2",
-            "password2"
+            "password2",
+            "TestUser"
         );
 
         // Verify alice is in both groups
@@ -690,7 +745,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "Group1",
-            "password1"
+            "password1",
+            "TestUser"
         );
     }
 
@@ -710,14 +766,15 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: customFee}(
             predictions,
             "CustomFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Verify group was created with correct entry fee
         assertEq(betting.getGroupEntryFee("CustomFeeGroup"), customFee);
         assertEq(
             betting.getGroupPrizePool("CustomFeeGroup"),
-            (customFee * 90) / 100
+            (customFee * 97) / 100
         );
 
         // Bob joins with correct fee
@@ -725,13 +782,14 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: customFee}(
             predictions,
             "CustomFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         assertEq(betting.getGroupMemberCount("CustomFeeGroup"), 2);
         assertEq(
             betting.getGroupPrizePool("CustomFeeGroup"),
-            (customFee * 2 * 90) / 100
+            (customFee * 2 * 97) / 100
         );
     }
 
@@ -747,7 +805,7 @@ contract SportsBettingTest is Test {
         betting.createGroup("ZeroFeeGroup", "password123", 0);
 
         // Test entry fee above maximum
-        uint256 tooHighFee = 0.002 ether; // Above 0.001 ETH limit
+        uint256 tooHighFee = 0.2 ether; // Above 0.1 ETH limit
         vm.prank(alice);
         vm.expectRevert(SportsBetting.InvalidEntryFee.selector);
         betting.createGroup("HighFeeGroup", "password123", tooHighFee);
@@ -761,7 +819,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: maxFee}(
             predictions,
             "MaxFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         assertEq(betting.getGroupEntryFee("MaxFeeGroup"), maxFee);
@@ -784,7 +843,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: groupFee}(
             predictions,
             "FixedFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Bob tries to join with wrong fee amount
@@ -793,7 +853,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "FixedFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         // Bob joins with correct fee
@@ -801,7 +862,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: groupFee}(
             predictions,
             "FixedFeeGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         assertEq(betting.getGroupMemberCount("FixedFeeGroup"), 2);
@@ -835,7 +897,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: customFee}(
             predictions,
             "InfoTestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         (exists, entryFee, memberCount, isFull) = betting.getGroupInfo(
@@ -851,7 +914,8 @@ contract SportsBettingTest is Test {
         betting.createBracket{value: customFee}(
             predictions,
             "InfoTestGroup",
-            "password123"
+            "password123",
+            "TestUser"
         );
 
         (exists, entryFee, memberCount, isFull) = betting.getGroupInfo(
