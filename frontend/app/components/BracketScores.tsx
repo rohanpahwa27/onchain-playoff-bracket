@@ -1,7 +1,7 @@
 'use client';
 
 import { useReadContract } from 'wagmi';
-import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi } from '../lib/OnchainPlayoffBracket';
+import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi, DEFAULT_GROUP_NAME } from '../lib/OnchainPlayoffBracket';
 import { useState, useEffect } from 'react';
 
 interface BracketScore {
@@ -19,15 +19,16 @@ export default function BracketScores() {
   const { data: scoresData } = useReadContract({
     address: onchainPlayoffBracketContract as `0x${string}`,
     abi: OnchainPlayoffBracketAbi,
-    functionName: 'getAllScores'
+    functionName: 'getGroupAllScores',
+    args: [DEFAULT_GROUP_NAME]
   });
 
   // Get predictions for current address
   const { data: picksData } = useReadContract({
     address: onchainPlayoffBracketContract as `0x${string}`,
     abi: OnchainPlayoffBracketAbi,
-    functionName: 'getBracketPredictions',
-    args: addresses.length > currentAddressIndex ? [addresses[currentAddressIndex]] : undefined
+    functionName: 'getGroupBracketPredictions',
+    args: addresses.length > currentAddressIndex ? [addresses[currentAddressIndex], DEFAULT_GROUP_NAME] : undefined
   });
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function BracketScores() {
         setCurrentAddressIndex(currentAddressIndex + 1);
       }
     }
-  }, [picksData, addresses, currentAddressIndex]);
+  }, [picksData, addresses, currentAddressIndex, bracketScores]);
 
   if (!mounted) return null;
 

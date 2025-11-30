@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract SportsBetting is Ownable, ReentrancyGuard {
+contract SportsBetting is Ownable {
     // Custom struct to represent a round's predictions
     struct RoundPredictions {
         string[] teams;
@@ -26,7 +25,8 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     // Mapping to store player predictions per group
-    mapping(bytes32 => mapping(address => Bracket)) private groupPlayerPredictions;
+    mapping(bytes32 => mapping(address => Bracket))
+        private groupPlayerPredictions;
 
     // Mapping to store groups by their name hash
     mapping(bytes32 => Group) private groups;
@@ -44,12 +44,28 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     bool public isBracketCreationPaused;
 
     // Events
-    event BracketCreated(address indexed player);
-    event GroupBracketCreated(address indexed player, bytes32 indexed groupId, string groupName);
-    event GroupCreated(bytes32 indexed groupId, string groupName, address indexed creator);
-    event PlayerJoinedGroup(address indexed player, bytes32 indexed groupId, string groupName);
+    event GroupBracketCreated(
+        address indexed player,
+        bytes32 indexed groupId,
+        string groupName
+    );
+    event GroupCreated(
+        bytes32 indexed groupId,
+        string groupName,
+        address indexed creator
+    );
+    event PlayerJoinedGroup(
+        address indexed player,
+        bytes32 indexed groupId,
+        string groupName
+    );
     event WinnerUpdated(uint256 indexed round, string teamNum);
-    event GroupWinnerDeclared(bytes32 indexed groupId, string groupName, address winner, uint256 score);
+    event GroupWinnerDeclared(
+        bytes32 indexed groupId,
+        string groupName,
+        address winner,
+        uint256 score
+    );
     event WinnerDeclared(address winner, uint256 score);
     event BracketDeleted(address indexed user);
     event WinnerRemoved(uint256 indexed round, string teamNum);
@@ -82,28 +98,36 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     uint256 private constant ROUND_3_POINTS = 4; // Conference
     uint256 private constant ROUND_4_POINTS = 6; // Super Bowl
 
-    constructor() {
+    constructor() Ownable(msg.sender) {
         // Remove initialization of actualWinners since we don't need it anymore
     }
 
     /**
      * @dev Internal function to hash group name and password for secure storage
      */
-    function _hashGroupCredentials(string memory groupName, string memory password) private pure returns (bytes32) {
+    function _hashGroupCredentials(
+        string memory groupName,
+        string memory password
+    ) private pure returns (bytes32) {
         return keccak256(abi.encodePacked(groupName, password));
     }
 
     /**
      * @dev Internal function to get group ID from group name
      */
-    function _getGroupId(string memory groupName) private pure returns (bytes32) {
+    function _getGroupId(
+        string memory groupName
+    ) private pure returns (bytes32) {
         return keccak256(abi.encodePacked(groupName));
     }
 
     /**
      * @dev Internal function to verify group password
      */
-    function _verifyGroupPassword(bytes32 groupId, string memory password) private view returns (bool) {
+    function _verifyGroupPassword(
+        bytes32 groupId,
+        string memory password
+    ) private view returns (bool) {
         if (!groups[groupId].exists) return false;
         string memory groupName = groups[groupId].name;
         bytes32 expectedHash = _hashGroupCredentials(groupName, password);
@@ -113,10 +137,14 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Internal function to create a new group
      */
-    function _createGroup(string memory groupName, string memory password, uint256 entryFee) private {
+    function _createGroup(
+        string memory groupName,
+        string memory password,
+        uint256 entryFee
+    ) private {
         bytes32 groupId = _getGroupId(groupName);
 
-        require(!groups[groupId].exists, "Group already exists");
+        require(!groups[groupId].exists, "Exists");
 
         // Validate entry fee
         if (entryFee == 0 || entryFee > MAX_ENTRY_FEE) revert InvalidEntryFee();
@@ -137,19 +165,36 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Creates a new group without requiring bracket submission
+     * @param groupName Name of the group to create
+     * @param password Password for the group
+     * @param entryFee Entry fee for the group
+     */
+    function createGroup(
+        string calldata groupName,
+        string calldata password,
+        uint256 entryFee
+    ) external {
+        // Validate inputs
+        if (bytes(groupName).length == 0) revert EmptyGroupName();
+        if (bytes(password).length == 0) revert EmptyPassword();
+
+        // Create the group using internal function
+        _createGroup(groupName, password, entryFee);
+    }
+
+    /**
      * @dev Creates a bracket for the player within a specific group
      * @param predictions Array of team numbers representing predictions
      * @param groupName Name of the group to join
      * @param password Password for the group
-     * @param entryFee Entry fee for the group (only used if creating new group)
      */
     function createBracket(
         string[] calldata predictions,
         string calldata groupName,
-        string calldata password,
-        uint256 entryFee
-    ) external payable nonReentrant {
-        require(!isBracketCreationPaused, "Bracket creation is currently paused");
+        string calldata password
+    ) external payable {
+        require(!isBracketCreationPaused, "Brackets paused");
 
         // Validate inputs
         if (bytes(groupName).length == 0) revert EmptyGroupName();
@@ -157,30 +202,31 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
         bytes32 groupId = _getGroupId(groupName);
 
-        // Check if group exists, if not create it
-        if (!groups[groupId].exists) {
-            _createGroup(groupName, password, entryFee);
-        } else {
-            // Verify password for existing group
-            if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
+        // Verify password for existing group
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
 
-            // Check if group is full
-            if (groups[groupId].members.length >= MAX_GROUP_SIZE) revert GroupFull();
-        }
+        // Check if group is full
+        if (groups[groupId].members.length >= MAX_GROUP_SIZE)
+            revert GroupFull();
 
         // Check if player already submitted in this group
-        if (groupHasSubmitted[groupId][msg.sender]) revert BracketAlreadySubmitted();
+        if (groupHasSubmitted[groupId][msg.sender])
+            revert BracketAlreadySubmitted();
 
         // Check if correct amount was sent (use group's entry fee)
-        if (msg.value != groups[groupId].entryFee) revert IncorrectEntryFeeAmount();
+        if (msg.value != groups[groupId].entryFee)
+            revert IncorrectEntryFeeAmount();
 
         // Add to group's total pot
         groups[groupId].totalPot += msg.value;
 
         // Validate predictions length
         if (
-            predictions.length
-                != (ROUND_1_PREDICTIONS + ROUND_2_PREDICTIONS + ROUND_3_PREDICTIONS + ROUND_4_PREDICTIONS)
+            predictions.length !=
+            (ROUND_1_PREDICTIONS +
+                ROUND_2_PREDICTIONS +
+                ROUND_3_PREDICTIONS +
+                ROUND_4_PREDICTIONS)
         ) {
             revert InvalidPredictionsLength();
         }
@@ -188,31 +234,47 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         uint256 currentIndex = 0;
 
         // Initialize arrays for each round
-        groupPlayerPredictions[groupId][msg.sender].rounds[0].teams = new string[](ROUND_1_PREDICTIONS);
-        groupPlayerPredictions[groupId][msg.sender].rounds[1].teams = new string[](ROUND_2_PREDICTIONS);
-        groupPlayerPredictions[groupId][msg.sender].rounds[2].teams = new string[](ROUND_3_PREDICTIONS);
-        groupPlayerPredictions[groupId][msg.sender].rounds[3].teams = new string[](ROUND_4_PREDICTIONS);
+        groupPlayerPredictions[groupId][msg.sender]
+            .rounds[0]
+            .teams = new string[](ROUND_1_PREDICTIONS);
+        groupPlayerPredictions[groupId][msg.sender]
+            .rounds[1]
+            .teams = new string[](ROUND_2_PREDICTIONS);
+        groupPlayerPredictions[groupId][msg.sender]
+            .rounds[2]
+            .teams = new string[](ROUND_3_PREDICTIONS);
+        groupPlayerPredictions[groupId][msg.sender]
+            .rounds[3]
+            .teams = new string[](ROUND_4_PREDICTIONS);
 
         // Fill Round 1
         for (uint256 i = 0; i < ROUND_1_PREDICTIONS; i++) {
-            groupPlayerPredictions[groupId][msg.sender].rounds[0].teams[i] = predictions[currentIndex];
+            groupPlayerPredictions[groupId][msg.sender].rounds[0].teams[
+                i
+            ] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 2
         for (uint256 i = 0; i < ROUND_2_PREDICTIONS; i++) {
-            groupPlayerPredictions[groupId][msg.sender].rounds[1].teams[i] = predictions[currentIndex];
+            groupPlayerPredictions[groupId][msg.sender].rounds[1].teams[
+                i
+            ] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 3
         for (uint256 i = 0; i < ROUND_3_PREDICTIONS; i++) {
-            groupPlayerPredictions[groupId][msg.sender].rounds[2].teams[i] = predictions[currentIndex];
+            groupPlayerPredictions[groupId][msg.sender].rounds[2].teams[
+                i
+            ] = predictions[currentIndex];
             currentIndex++;
         }
 
         // Fill Round 4
-        groupPlayerPredictions[groupId][msg.sender].rounds[3].teams[0] = predictions[currentIndex];
+        groupPlayerPredictions[groupId][msg.sender].rounds[3].teams[
+            0
+        ] = predictions[currentIndex];
 
         // Add player to group if not already a member
         bool isMember = false;
@@ -239,7 +301,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @param round Round number (1-4)
      * @param teamNum Team number that won
      */
-    function updateWinner(uint256 round, string calldata teamNum) external onlyOwner {
+    function updateWinner(
+        uint256 round,
+        string calldata teamNum
+    ) external onlyOwner {
         if (round < 1 || round > 4) revert InvalidRound();
 
         uint256 roundIndex = round - 1;
@@ -249,12 +314,17 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         else if (roundIndex == 2) maxWinners = ROUND_3_PREDICTIONS;
         else maxWinners = ROUND_4_PREDICTIONS;
 
-        require(roundWinners[roundIndex].length < maxWinners, "Maximum winners for this round already set");
+        require(
+            roundWinners[roundIndex].length < maxWinners,
+            "Max winners set"
+        );
 
-        // Check for duplicates
         for (uint256 i = 0; i < roundWinners[roundIndex].length; i++) {
-            if (keccak256(bytes(roundWinners[roundIndex][i])) == keccak256(bytes(teamNum))) {
-                revert("Winner already exists in this round");
+            if (
+                keccak256(bytes(roundWinners[roundIndex][i])) ==
+                keccak256(bytes(teamNum))
+            ) {
+                revert("Duplicate");
             }
         }
 
@@ -269,16 +339,18 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @dev Distributes prize for a specific group when all rounds are complete
      * @param groupName Name of the group
      */
-    function distributeGroupPrize(string calldata groupName) external onlyOwner {
+    function distributeGroupPrize(
+        string calldata groupName
+    ) external onlyOwner {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
-        require(groups[groupId].totalPot > 0, "No prize pool for this group");
+        require(groups[groupId].exists, "Invalid Group");
+        require(groups[groupId].totalPot > 0, "No prize pool");
 
         // Check if all rounds are complete (at least 1 winner in final round)
-        require(roundWinners[3].length > 0, "Final round not complete");
+        require(roundWinners[3].length > 0, "Bracket not complete");
 
-        (address winner, uint256 score) = calculateGroupWinner(groupId);
-        require(winner != address(0), "No valid winner found");
+        (address winner, uint256 score) = _calculateGroupWinner(groupId);
+        require(winner != address(0), "NoWinner");
 
         uint256 prize = (groups[groupId].totalPot * 90) / 100; // 90% of group pot
 
@@ -286,8 +358,8 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         groups[groupId].totalPot = 0;
 
         // Transfer prize to winner
-        (bool success,) = payable(winner).call{value: prize}("");
-        require(success, "Failed to send prize to winner");
+        (bool success, ) = payable(winner).call{value: prize}("");
+        require(success, "Transfer failed");
 
         emit GroupWinnerDeclared(groupId, groupName, winner, score);
     }
@@ -300,9 +372,12 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @param startIndex Starting index in the allGroupIds array
      * @param batchSize Number of groups to process in this batch
      */
-    function distributeGroupPrizesBatch(uint256 startIndex, uint256 batchSize) external onlyOwner {
-        require(roundWinners[3].length > 0, "Final round not complete");
-        require(startIndex < allGroupIds.length, "Start index out of bounds");
+    function distributeGroupPrizesBatch(
+        uint256 startIndex,
+        uint256 batchSize
+    ) external onlyOwner {
+        require(roundWinners[3].length > 0, "Bracket not complete");
+        require(startIndex < allGroupIds.length, "OOIndex");
 
         uint256 endIndex = startIndex + batchSize;
         if (endIndex > allGroupIds.length) {
@@ -315,7 +390,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
             // Skip if group has no prize pool
             if (groups[groupId].totalPot == 0) continue;
 
-            (address winner, uint256 score) = calculateGroupWinner(groupId);
+            (address winner, uint256 score) = _calculateGroupWinner(groupId);
             if (winner == address(0)) continue; // No valid winner
 
             uint256 prize = (groups[groupId].totalPot * 90) / 100;
@@ -324,10 +399,15 @@ contract SportsBetting is Ownable, ReentrancyGuard {
             groups[groupId].totalPot = 0;
 
             // Transfer prize to winner
-            (bool success,) = payable(winner).call{value: prize}("");
-            require(success, "Failed to send prize to winner");
+            (bool success, ) = payable(winner).call{value: prize}("");
+            require(success, "Transfer failed");
 
-            emit GroupWinnerDeclared(groupId, groups[groupId].name, winner, score);
+            emit GroupWinnerDeclared(
+                groupId,
+                groups[groupId].name,
+                winner,
+                score
+            );
         }
     }
 
@@ -341,8 +421,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Get group IDs in a specific range for batch processing
      */
-    function getGroupIdsBatch(uint256 startIndex, uint256 batchSize) external view returns (bytes32[] memory) {
-        require(startIndex < allGroupIds.length, "Start index out of bounds");
+    function getGroupIdsBatch(
+        uint256 startIndex,
+        uint256 batchSize
+    ) external view returns (bytes32[] memory) {
+        require(startIndex < allGroupIds.length, "OOB");
 
         uint256 endIndex = startIndex + batchSize;
         if (endIndex > allGroupIds.length) {
@@ -363,8 +446,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @return winner Address of the winner
      * @return highestScore Highest score achieved
      */
-    function calculateGroupWinner(bytes32 groupId) public view returns (address winner, uint256 highestScore) {
-        require(groups[groupId].exists, "Group does not exist");
+    function _calculateGroupWinner(
+        bytes32 groupId
+    ) internal view returns (address winner, uint256 highestScore) {
+        require(groups[groupId].exists, "NoGroup");
 
         highestScore = 0;
         address[] memory groupMembers = groups[groupId].members;
@@ -379,7 +464,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
             // Calculate score for each round
             for (uint256 round = 0; round < 4; round++) {
-                playerScore += _calculateGroupRoundScore(groupId, player, round);
+                playerScore += _calculateGroupRoundScore(
+                    groupId,
+                    player,
+                    round
+                );
             }
 
             if (playerScore > highestScore) {
@@ -390,29 +479,64 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Calculates winners for all groups
+     * @return groupNames Array of group names
+     * @return winners Array of winner addresses for each group
+     * @return scores Array of winning scores for each group
+     */
+    function calculateAllGroupWinners()
+        external
+        view
+        returns (
+            string[] memory groupNames,
+            address[] memory winners,
+            uint256[] memory scores
+        )
+    {
+        uint256 totalGroups = allGroupIds.length;
+
+        groupNames = new string[](totalGroups);
+        winners = new address[](totalGroups);
+        scores = new uint256[](totalGroups);
+
+        for (uint256 i = 0; i < totalGroups; i++) {
+            bytes32 groupId = allGroupIds[i];
+            groupNames[i] = groups[groupId].name;
+            (winners[i], scores[i]) = _calculateGroupWinner(groupId);
+        }
+
+        return (groupNames, winners, scores);
+    }
+
+    /**
      * @dev Calculates score for a specific round within a group
      */
-    function _calculateGroupRoundScore(bytes32 groupId, address player, uint256 roundIndex)
-        private
-        view
-        returns (uint256)
-    {
+    function _calculateGroupRoundScore(
+        bytes32 groupId,
+        address player,
+        uint256 roundIndex
+    ) private view returns (uint256) {
         uint256 score = 0;
         string[] memory winners = _getRoundWinners(roundIndex);
-        string[] memory playerTeams = groupPlayerPredictions[groupId][player].rounds[roundIndex].teams;
+        string[] memory playerTeams = groupPlayerPredictions[groupId][player]
+            .rounds[roundIndex]
+            .teams;
 
         // For each winner in this round
         for (uint256 i = 0; i < winners.length; i++) {
             // Check if player predicted this winner
             for (uint256 j = 0; j < playerTeams.length; j++) {
-                if (keccak256(bytes(winners[i])) == keccak256(bytes(playerTeams[j]))) {
+                if (
+                    keccak256(bytes(winners[i])) ==
+                    keccak256(bytes(playerTeams[j]))
+                ) {
                     // Apply round-specific points (only once per correct winner)
-                    if (roundIndex == 0) score += ROUND_1_POINTS; // Wildcard = 1 point
-
-                    else if (roundIndex == 1) score += ROUND_2_POINTS; // Divisional = 2 points
-
-                    else if (roundIndex == 2) score += ROUND_3_POINTS; // Conference = 4 points
-
+                    if (roundIndex == 0)
+                        score += ROUND_1_POINTS; // Wildcard = 1 point
+                    else if (roundIndex == 1)
+                        score += ROUND_2_POINTS; // Divisional = 2 points
+                    else if (roundIndex == 2)
+                        score += ROUND_3_POINTS; // Conference = 4 points
                     else if (roundIndex == 3) score += ROUND_4_POINTS; // Super Bowl = 6 points
                     break; // Break inner loop once we find a match
                 }
@@ -424,7 +548,9 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Gets winners for a specific round
      */
-    function _getRoundWinners(uint256 round) private view returns (string[] memory) {
+    function _getRoundWinners(
+        uint256 round
+    ) private view returns (string[] memory) {
         return roundWinners[round];
     }
 
@@ -433,8 +559,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Get winners for a specific round
      */
-    function getRoundWinners(uint256 round) external view returns (string[] memory) {
-        require(round <= 4 && round > 0, "Invalid round");
+    function getRoundWinners(
+        uint256 round
+    ) external view returns (string[] memory) {
+        require(round <= 4 && round > 0, "BadRound");
         return roundWinners[round - 1];
     }
 
@@ -480,7 +608,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @dev Pauses the creation of new brackets. Only owner can call.
      */
     function pauseBracketCreation() external onlyOwner {
-        require(!isBracketCreationPaused, "Bracket creation is already paused");
+        require(!isBracketCreationPaused, "Paused");
         isBracketCreationPaused = true;
     }
 
@@ -488,7 +616,7 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @dev Resumes the creation of new brackets. Only owner can call.
      */
     function resumeBracketCreation() external onlyOwner {
-        require(isBracketCreationPaused, "Bracket creation is not paused");
+        require(isBracketCreationPaused, "Not paused");
         isBracketCreationPaused = false;
     }
 
@@ -497,7 +625,10 @@ contract SportsBetting is Ownable, ReentrancyGuard {
      * @param round Round number (1-4)
      * @param teamNum Team to remove
      */
-    function removeWinner(uint256 round, string calldata teamNum) external onlyOwner {
+    function removeWinner(
+        uint256 round,
+        string calldata teamNum
+    ) external onlyOwner {
         if (round < 1 || round > 4) revert InvalidRound();
 
         uint256 roundIndex = round - 1;
@@ -506,15 +637,20 @@ contract SportsBetting is Ownable, ReentrancyGuard {
         // Remove from roundWinners array
         string[] storage roundWinnersList = roundWinners[roundIndex];
         for (uint256 i = 0; i < roundWinnersList.length; i++) {
-            if (keccak256(bytes(roundWinnersList[i])) == keccak256(bytes(teamNum))) {
-                roundWinnersList[i] = roundWinnersList[roundWinnersList.length - 1];
+            if (
+                keccak256(bytes(roundWinnersList[i])) ==
+                keccak256(bytes(teamNum))
+            ) {
+                roundWinnersList[i] = roundWinnersList[
+                    roundWinnersList.length - 1
+                ];
                 roundWinnersList.pop();
                 found = true;
                 break;
             }
         }
 
-        require(found, "Winner not found in this round");
+        require(found, "Winner not found");
 
         emit WinnerRemoved(round, teamNum);
     }
@@ -531,7 +667,9 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Check if a group exists
      */
-    function groupExists(string calldata groupName) external view returns (bool) {
+    function groupExists(
+        string calldata groupName
+    ) external view returns (bool) {
         bytes32 groupId = _getGroupId(groupName);
         return groups[groupId].exists;
     }
@@ -539,43 +677,54 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Get group members
      */
-    function getGroupMembers(string calldata groupName) external view returns (address[] memory) {
+    function getGroupMembers(
+        string calldata groupName
+    ) external view returns (address[] memory) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
+        require(groups[groupId].exists, "NoGroup");
         return groups[groupId].members;
     }
 
     /**
      * @dev Get group member count
      */
-    function getGroupMemberCount(string calldata groupName) external view returns (uint256) {
+    function getGroupMemberCount(
+        string calldata groupName
+    ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
+        require(groups[groupId].exists, "NoGroup");
         return groups[groupId].members.length;
     }
 
     /**
      * @dev Get group prize pool
      */
-    function getGroupPrizePool(string calldata groupName) external view returns (uint256) {
+    function getGroupPrizePool(
+        string calldata groupName
+    ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
+        require(groups[groupId].exists, "NoGroup");
         return (groups[groupId].totalPot * 90) / 100; // 90% of total pot
     }
 
     /**
      * @dev Get group entry fee
      */
-    function getGroupEntryFee(string calldata groupName) external view returns (uint256) {
+    function getGroupEntryFee(
+        string calldata groupName
+    ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
+        require(groups[groupId].exists, "NoGroup");
         return groups[groupId].entryFee;
     }
 
     /**
      * @dev Check if a player has submitted a bracket in a specific group
      */
-    function hasSubmittedGroupBracket(address player, string calldata groupName) external view returns (bool) {
+    function hasSubmittedGroupBracket(
+        address player,
+        string calldata groupName
+    ) external view returns (bool) {
         bytes32 groupId = _getGroupId(groupName);
         return groups[groupId].exists && groupHasSubmitted[groupId][player];
     }
@@ -583,49 +732,33 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     /**
      * @dev Get all predictions for a player's bracket in a specific group
      */
-    function getGroupBracketPredictions(address player, string calldata groupName)
-        external
-        view
-        returns (string[][] memory result)
-    {
+    function getGroupBracketPredictions(
+        address player,
+        string calldata groupName
+    ) external view returns (string[][] memory result) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
-        require(groupHasSubmitted[groupId][player], "Player has not submitted a bracket in this group");
+        require(groups[groupId].exists, "NoGroup");
+        require(groupHasSubmitted[groupId][player], "No bracket");
 
         result = new string[][](4);
 
         for (uint256 roundIndex = 0; roundIndex < 4; roundIndex++) {
-            result[roundIndex] = groupPlayerPredictions[groupId][player].rounds[roundIndex].teams;
+            result[roundIndex] = groupPlayerPredictions[groupId][player]
+                .rounds[roundIndex]
+                .teams;
         }
 
         return result;
     }
 
     /**
-     * @dev Get score for a specific user's bracket in a group
-     */
-    function getGroupUserScore(address user, string calldata groupName) external view returns (uint256) {
-        bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
-        require(groupHasSubmitted[groupId][user], "No bracket found for this address in this group");
-
-        uint256 score = 0;
-        for (uint256 round = 0; round < 4; round++) {
-            score += _calculateGroupRoundScore(groupId, user, round);
-        }
-        return score;
-    }
-
-    /**
      * @dev Get scores for all submitted brackets in a group
      */
-    function getGroupAllScores(string calldata groupName)
-        external
-        view
-        returns (address[] memory users, uint256[] memory scores)
-    {
+    function getGroupAllScores(
+        string calldata groupName
+    ) external view returns (address[] memory users, uint256[] memory scores) {
         bytes32 groupId = _getGroupId(groupName);
-        require(groups[groupId].exists, "Group does not exist");
+        require(groups[groupId].exists, "NoGroup");
 
         address[] memory groupMembers = groups[groupId].members;
 
@@ -647,7 +780,11 @@ contract SportsBetting is Ownable, ReentrancyGuard {
 
                 uint256 score = 0;
                 for (uint256 round = 0; round < 4; round++) {
-                    score += _calculateGroupRoundScore(groupId, groupMembers[i], round);
+                    score += _calculateGroupRoundScore(
+                        groupId,
+                        groupMembers[i],
+                        round
+                    );
                 }
                 scores[index] = score;
                 index++;
@@ -658,42 +795,46 @@ contract SportsBetting is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Get all groups a player belongs to
+     * @dev Get score for a user in a group
      */
-    function getPlayerGroups(address player) external view returns (bytes32[] memory) {
-        return playerGroups[player];
-    }
-
-    /**
-     * @dev Check if a player can join a group (not full and player hasn't submitted)
-     */
-    function canJoinGroup(address player, string calldata groupName) external view returns (bool) {
+    function getGroupUserScore(
+        address user,
+        string calldata groupName
+    ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
-        if (!groups[groupId].exists) return true; // Can create new group
-        if (groups[groupId].members.length >= MAX_GROUP_SIZE) return false; // Group is full
-        if (groupHasSubmitted[groupId][player]) return false; // Already submitted
-        return true;
+        require(
+            groups[groupId].exists && groupHasSubmitted[groupId][user],
+            "NoData"
+        );
+
+        uint256 score = 0;
+        for (uint256 round = 0; round < 4; round++) {
+            score += _calculateGroupRoundScore(groupId, user, round);
+        }
+        return score;
     }
 
     /**
-     * @dev Get the maximum allowed entry fee for groups
+     * @dev Get max entry fee
      */
     function getMaxEntryFee() external pure returns (uint256) {
         return MAX_ENTRY_FEE;
     }
 
     /**
-     * @dev Get group info including entry fee (public function, no password required)
-     * @param groupName Name of the group to check
-     * @return exists Whether the group exists
-     * @return entryFee Entry fee for the group (0 if group doesn't exist)
-     * @return memberCount Number of members in the group
-     * @return isFull Whether the group has reached maximum capacity
+     * @dev Get group info
      */
-    function getGroupInfo(string calldata groupName)
+    function getGroupInfo(
+        string calldata groupName
+    )
         external
         view
-        returns (bool exists, uint256 entryFee, uint256 memberCount, bool isFull)
+        returns (
+            bool exists,
+            uint256 entryFee,
+            uint256 memberCount,
+            bool isFull
+        )
     {
         bytes32 groupId = _getGroupId(groupName);
         exists = groups[groupId].exists;
@@ -702,10 +843,62 @@ contract SportsBetting is Ownable, ReentrancyGuard {
             entryFee = groups[groupId].entryFee;
             memberCount = groups[groupId].members.length;
             isFull = memberCount >= MAX_GROUP_SIZE;
-        } else {
-            entryFee = 0;
-            memberCount = 0;
-            isFull = false;
         }
+    }
+
+    /**
+     * @dev Get all groups a player belongs to
+     */
+    function getPlayerGroups(
+        address player
+    ) external view returns (bytes32[] memory) {
+        return playerGroups[player];
+    }
+
+    /**
+     * @dev Check if a player can join a group (not full and player hasn't submitted)
+     */
+    function canJoinGroup(
+        address player,
+        string calldata groupName
+    ) external view returns (bool) {
+        bytes32 groupId = _getGroupId(groupName);
+        if (!groups[groupId].exists) return true; // Can create new group
+        if (groups[groupId].members.length >= MAX_GROUP_SIZE) return false; // Group is full
+        if (groupHasSubmitted[groupId][player]) return false; // Already submitted
+        return true;
+    }
+
+    /**
+     * @dev Get all groups with their details (excluding passwords)
+     * @return groupNames Array of group names
+     * @return entryFees Array of entry fees for each group
+     * @return remainingSpots Array of remaining spots in each group
+     */
+    function getAllGroups()
+        external
+        view
+        returns (
+            string[] memory groupNames,
+            uint256[] memory entryFees,
+            uint256[] memory remainingSpots
+        )
+    {
+        uint256 totalGroups = allGroupIds.length;
+
+        groupNames = new string[](totalGroups);
+        entryFees = new uint256[](totalGroups);
+        remainingSpots = new uint256[](totalGroups);
+
+        for (uint256 i = 0; i < totalGroups; i++) {
+            bytes32 groupId = allGroupIds[i];
+            Group storage group = groups[groupId];
+
+            groupNames[i] = group.name;
+            entryFees[i] = group.entryFee;
+            remainingSpots[i] = MAX_GROUP_SIZE - group.members.length;
+        }
+
+        return (groupNames, entryFees, remainingSpots);
     }
 }

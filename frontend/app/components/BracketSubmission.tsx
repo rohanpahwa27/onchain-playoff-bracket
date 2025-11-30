@@ -1,7 +1,7 @@
 'use client';
 
 import { useAccount, useReadContract, useChainId, useSwitchChain } from 'wagmi';
-import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi } from '../lib/OnchainPlayoffBracket';
+import { onchainPlayoffBracketContract, OnchainPlayoffBracketAbi, DEFAULT_GROUP_NAME } from '../lib/OnchainPlayoffBracket';
 import { parseEther, encodeFunctionData } from 'viem';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { Transaction, TransactionButton, TransactionStatus, TransactionStatusLabel, TransactionStatusAction } from '@coinbase/onchainkit/transaction';
@@ -29,8 +29,8 @@ export default function BracketSubmission({
   const { data: hasSubmitted } = useReadContract({
     address: onchainPlayoffBracketContract as `0x${string}`,
     abi: OnchainPlayoffBracketAbi,
-    functionName: 'hasSubmittedBracket',
-    args: address ? [address as `0x${string}`] : undefined
+    functionName: 'hasSubmittedGroupBracket',
+    args: address ? [address as `0x${string}`, DEFAULT_GROUP_NAME] : undefined
   });
 
   // Auto-switch to Base Sepolia if on wrong chain
@@ -39,11 +39,11 @@ export default function BracketSubmission({
   }
 
   const calls = [{
-    to: onchainPlayoffBracketContract,
+    to: onchainPlayoffBracketContract as `0x${string}`,
     data: encodeFunctionData({
       abi: OnchainPlayoffBracketAbi,
       functionName: "createBracket",
-      args: [formatBracketSelections()],
+      args: [formatBracketSelections(), DEFAULT_GROUP_NAME, "public", parseEther("0.000001")],
     }),
     value: parseEther("0.000001")
   }];

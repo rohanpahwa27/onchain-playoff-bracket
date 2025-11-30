@@ -54,6 +54,8 @@ currently used smart contract: https://sepolia.basescan.org/address/0xb2fe96df7d
 
 
 forge script Deploy --rpc-url "https://sepolia.base.org" --account onchain-playoff-bracket --sender $WALLET_ADDRESS  --broadcast -vvvv
+
+forge script Deploy --rpc-url "https://sepolia.base.org" --keystore /Users/rohanpahwa/.foundry/keystores/onchain-playoff-bracket/6e702d12-4850-4211-86b1-a5fe8592c725 --sender $WALLET_ADDRESS --broadcast -vvvv
 ```
 
 ### Contract Verification
