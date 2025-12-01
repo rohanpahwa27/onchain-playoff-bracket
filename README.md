@@ -83,10 +83,10 @@ $ forge verify-contract <CONTRACT_ADDRESS> contracts/SportsBetting.sol:SportsBet
 **Note**: Base Sepolia chain ID is `84532`. For more details on the V2 migration, see: https://docs.etherscan.io/v2-migration
 
 #### Current Deployed Contract
-- **Address**: `0xbb3466a0a474d085511558ba4c3b1bb61a252faf`
+- **Address**: `0x21975c278c98c1ea70229dfed808fd4e81e17b6d`
 - **Network**: Base Sepolia
-- **Blockscout**: https://base-sepolia.blockscout.com/address/0xbb3466a0a474d085511558ba4c3b1bb61a252faf
-- **Basescan**: https://sepolia.basescan.org/address/0xbb3466a0a474d085511558ba4c3b1bb61a252faf
+- **Blockscout**: https://base-sepolia.blockscout.com/address/0x21975c278c98c1ea70229dfed808fd4e81e17b6d
+- **Basescan**: https://sepolia.basescan.org/address/0x21975c278c98c1ea70229dfed808fd4e81e17b6d
 
 ### Cast
 
