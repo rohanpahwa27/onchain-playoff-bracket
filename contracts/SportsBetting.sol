@@ -952,8 +952,7 @@ contract SportsBetting is Ownable {
      */
     function canJoinGroup(
         address player,
-        string calldata groupName,
-        string calldata password
+        string calldata groupName
     ) external view returns (bool) {
         bytes32 groupId = _getGroupId(groupName);
         if (!groups[groupId].exists) return true; // Can create new group

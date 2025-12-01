@@ -313,12 +313,8 @@ contract SportsBettingTest is Test {
         betting.updateWinner(1, "TeamA"); // Round 1 = 1 point
         // Pause brackets to view scores
         betting.pauseBracketCreation();
-        (
-            address[] memory users1,
-            uint256[] memory scores1,
-            string[] memory usernames1,
-
-        ) = betting.getGroupData("TestGroup", "password123");
+        (address[] memory users1, uint256[] memory scores1, , ) = betting
+            .getGroupData("TestGroup", "password123");
         // Find Alice's and Bob's scores
         for (uint256 i = 0; i < users1.length; i++) {
             if (users1[i] == alice) {
@@ -329,12 +325,8 @@ contract SportsBettingTest is Test {
         }
 
         betting.updateWinner(2, "TeamA"); // Round 2 = 2 points
-        (
-            address[] memory users2,
-            uint256[] memory scores2,
-            string[] memory usernames2,
-
-        ) = betting.getGroupData("TestGroup", "password123");
+        (address[] memory users2, uint256[] memory scores2, , ) = betting
+            .getGroupData("TestGroup", "password123");
         for (uint256 i = 0; i < users2.length; i++) {
             if (users2[i] == alice) {
                 assertEq(scores2[i], 3); // 1 point from Round 1 + 2 points from Round 2 = 3
@@ -344,12 +336,8 @@ contract SportsBettingTest is Test {
         }
 
         // Check all scores
-        (
-            address[] memory users,
-            uint256[] memory scores,
-            string[] memory usernames,
-
-        ) = betting.getGroupData("TestGroup", "password123");
+        (address[] memory users, uint256[] memory scores, , ) = betting
+            .getGroupData("TestGroup", "password123");
         assertEq(users.length, 2);
         assertEq(scores.length, 2);
 
