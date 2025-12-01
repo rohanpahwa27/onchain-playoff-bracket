@@ -1123,4 +1123,92 @@ contract SportsBettingTest is Test {
 
         assertEq(betting.getGroupMemberCount("AnotherGroup", "pass456"), 1);
     }
+
+    function testDistributeGroupPrizesBatch() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = "TeamA";
+        }
+
+        // Create 5 groups with different participants
+        for (uint256 g = 0; g < 5; g++) {
+            string memory groupName = string(
+                abi.encodePacked("BatchGroup", vm.toString(g))
+            );
+            string memory password = string(
+                abi.encodePacked("pass", vm.toString(g))
+            );
+
+            vm.prank(alice);
+            betting.createGroup(groupName, password, ENTRY_FEE);
+
+            // Alice joins each group
+            vm.prank(alice);
+            betting.createBracket{value: ENTRY_FEE}(
+                predictions,
+                groupName,
+                password,
+                string(abi.encodePacked("Alice", vm.toString(g)))
+            );
+
+            // Bob joins groups 0, 1, 2 (not 3 and 4)
+            if (g < 3) {
+                vm.prank(bob);
+                betting.createBracket{value: ENTRY_FEE}(
+                    predictions,
+                    groupName,
+                    password,
+                    string(abi.encodePacked("Bob", vm.toString(g)))
+                );
+            }
+        }
+
+        // Set all winners to complete the bracket
+        string[] memory winners = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            winners[i] = "TeamA";
+        }
+        betting.setAllWinners(winners);
+
+        // Record balances before payout
+        uint256 aliceBalanceBefore = alice.balance;
+
+        // Get total group count
+        uint256 totalGroups = betting.getTotalGroupCount();
+        assertEq(totalGroups, 5);
+
+        // Distribute prizes for first 3 groups (batch 0-2)
+        betting.distributeGroupPrizesBatch(0, 3);
+
+        // Alice and Bob should have won groups 0, 1, 2 (tied, Alice joined first)
+        assertGt(alice.balance, aliceBalanceBefore);
+
+        // Verify first 3 groups have been paid out (totalPot = 0)
+        assertEq(betting.getGroupPrizePool("BatchGroup0", "pass0"), 0);
+        assertEq(betting.getGroupPrizePool("BatchGroup1", "pass1"), 0);
+        assertEq(betting.getGroupPrizePool("BatchGroup2", "pass2"), 0);
+
+        // Verify groups 3 and 4 still have prize pools
+        assertGt(betting.getGroupPrizePool("BatchGroup3", "pass3"), 0);
+        assertGt(betting.getGroupPrizePool("BatchGroup4", "pass4"), 0);
+
+        // Record balance after first batch
+        uint256 aliceBalanceAfterBatch1 = alice.balance;
+
+        // Distribute remaining groups (batch 3-4)
+        betting.distributeGroupPrizesBatch(3, 2);
+
+        // Alice should have won groups 3 and 4 (only participant)
+        assertGt(alice.balance, aliceBalanceAfterBatch1);
+
+        // Verify all groups have been paid out
+        assertEq(betting.getGroupPrizePool("BatchGroup3", "pass3"), 0);
+        assertEq(betting.getGroupPrizePool("BatchGroup4", "pass4"), 0);
+
+        // Test calling batch again - should not fail (skips groups with 0 pot)
+        betting.distributeGroupPrizesBatch(0, 5);
+
+        // Test with batch size larger than remaining groups
+        betting.distributeGroupPrizesBatch(0, 100);
+    }
 }
