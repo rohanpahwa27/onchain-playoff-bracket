@@ -94,7 +94,7 @@ contract SportsBetting is Ownable {
     uint256 private constant ROUND_2_PREDICTIONS = 4;
     uint256 private constant ROUND_3_PREDICTIONS = 2;
     uint256 private constant ROUND_4_PREDICTIONS = 1;
-    uint256 private constant MAX_GROUP_SIZE = 20;
+    uint256 private constant MAX_GROUP_SIZE = 50;
     uint256 private constant MAX_ENTRY_FEE = 0.1 ether;
     uint256 private constant DEVELOPER_FEE_PERCENTAGE = 3;
 
