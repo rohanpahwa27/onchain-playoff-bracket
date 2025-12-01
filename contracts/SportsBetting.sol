@@ -37,6 +37,9 @@ contract SportsBetting is Ownable {
     // Mapping to store usernames for players in groups
     mapping(bytes32 => mapping(address => string)) private groupPlayerUsernames;
 
+    // Mapping to track used usernames per group (for uniqueness check)
+    mapping(bytes32 => mapping(string => bool)) private groupUsernamesTaken;
+
     // Global state variables for round winners (shared across all groups)
     mapping(uint256 => string[]) private roundWinners;
 
@@ -82,6 +85,7 @@ contract SportsBetting is Ownable {
     error EmptyGroupName();
     error EmptyPassword();
     error EmptyUsername();
+    error DuplicateUsername();
     error InvalidEntryFee();
     error IncorrectEntryFeeAmount();
 
@@ -202,9 +206,12 @@ contract SportsBetting is Ownable {
         if (groups[groupId].members.length >= MAX_GROUP_SIZE)
             revert GroupFull();
 
-        // Check if player already submitted in this group
+        // Check if player already submitted in this group (before username check)
         if (groupHasSubmitted[groupId][msg.sender])
             revert BracketAlreadySubmitted();
+
+        // Check if username is already taken in this group
+        if (groupUsernamesTaken[groupId][username]) revert DuplicateUsername();
 
         // Check if correct amount was sent (use group's entry fee)
         if (msg.value != groups[groupId].entryFee)
@@ -274,6 +281,7 @@ contract SportsBetting is Ownable {
 
         groupHasSubmitted[groupId][msg.sender] = true;
         groupPlayerUsernames[groupId][msg.sender] = username;
+        groupUsernamesTaken[groupId][username] = true;
 
         emit GroupBracketCreated(msg.sender, groupId, groupName);
     }

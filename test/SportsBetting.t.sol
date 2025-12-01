@@ -383,7 +383,7 @@ contract SportsBettingTest is Test {
             predictions,
             "TestGroup",
             "password123",
-            "TestUser"
+            "Alice"
         );
 
         // Verify group was created and alice joined
@@ -399,7 +399,7 @@ contract SportsBettingTest is Test {
             predictions,
             "TestGroup",
             "password123",
-            "TestUser"
+            "Bob"
         );
         assertEq(betting.getGroupMemberCount("TestGroup", "password123"), 2);
 
@@ -671,7 +671,7 @@ contract SportsBettingTest is Test {
             predictions,
             "SecretGroup",
             "correctPassword",
-            "TestUser"
+            "Alice"
         );
 
         // Bob tries to join with wrong password
@@ -681,7 +681,7 @@ contract SportsBettingTest is Test {
             predictions,
             "SecretGroup",
             "wrongPassword",
-            "TestUser"
+            "Bob"
         );
 
         // Bob joins with correct password
@@ -690,7 +690,7 @@ contract SportsBettingTest is Test {
             predictions,
             "SecretGroup",
             "correctPassword",
-            "TestUser"
+            "Charlie"
         );
 
         assertEq(
@@ -737,7 +737,7 @@ contract SportsBettingTest is Test {
                 predictions,
                 "FullGroup",
                 "password123",
-                "TestUser"
+                string(abi.encodePacked("User", vm.toString(i)))
             );
         }
 
@@ -752,7 +752,7 @@ contract SportsBettingTest is Test {
             predictions,
             "FullGroup",
             "password123",
-            "TestUser"
+            "User21"
         );
     }
 
@@ -821,7 +821,7 @@ contract SportsBettingTest is Test {
             predictions,
             "CustomFeeGroup",
             "password123",
-            "TestUser"
+            "Alice"
         );
 
         // Verify group was created with correct entry fee
@@ -880,7 +880,7 @@ contract SportsBettingTest is Test {
             predictions,
             "MaxFeeGroup",
             "password123",
-            "TestUser"
+            "Alice"
         );
 
         assertEq(
@@ -917,7 +917,7 @@ contract SportsBettingTest is Test {
             predictions,
             "FixedFeeGroup",
             "password123",
-            "TestUser"
+            "Alice1"
         );
 
         // Bob joins with correct fee
@@ -926,7 +926,7 @@ contract SportsBettingTest is Test {
             predictions,
             "FixedFeeGroup",
             "password123",
-            "TestUser"
+            "Bob1"
         );
 
         assertEq(
@@ -964,7 +964,7 @@ contract SportsBettingTest is Test {
             predictions,
             "InfoTestGroup",
             "password123",
-            "TestUser"
+            "Alice3"
         );
 
         (exists, entryFee, memberCount, isFull) = betting.getGroupInfo(
@@ -982,7 +982,7 @@ contract SportsBettingTest is Test {
             predictions,
             "InfoTestGroup",
             "password123",
-            "TestUser"
+            "Bob3"
         );
 
         (exists, entryFee, memberCount, isFull) = betting.getGroupInfo(
@@ -1073,5 +1073,66 @@ contract SportsBettingTest is Test {
         // Test getGroupMemberCount with wrong password
         vm.expectRevert(SportsBetting.InvalidPassword.selector);
         betting.getGroupMemberCount("ProtectedGroup", "wrongPassword");
+    }
+
+    function testDuplicateUsernameInGroup() public {
+        string[] memory predictions = new string[](13);
+        for (uint256 i = 0; i < 13; i++) {
+            predictions[i] = string(abi.encodePacked("team", vm.toString(i)));
+        }
+
+        // Alice creates a group and joins with username "Player1"
+        vm.prank(alice);
+        betting.createGroup("UniqueNameGroup", "password123", ENTRY_FEE);
+
+        vm.prank(alice);
+        betting.createBracket{value: ENTRY_FEE}(
+            predictions,
+            "UniqueNameGroup",
+            "password123",
+            "Player1"
+        );
+
+        // Bob tries to join with the same username "Player1" - should fail
+        vm.prank(bob);
+        vm.expectRevert(SportsBetting.DuplicateUsername.selector);
+        betting.createBracket{value: ENTRY_FEE}(
+            predictions,
+            "UniqueNameGroup",
+            "password123",
+            "Player1"
+        );
+
+        // Bob joins with a different username "Player2" - should succeed
+        vm.prank(bob);
+        betting.createBracket{value: ENTRY_FEE}(
+            predictions,
+            "UniqueNameGroup",
+            "password123",
+            "Player2"
+        );
+
+        // Verify both users are in the group
+        assertEq(
+            betting.getGroupMemberCount("UniqueNameGroup", "password123"),
+            2
+        );
+
+        // Verify usernames are different in different groups
+        vm.prank(alice);
+        betting.createGroup("AnotherGroup", "pass456", ENTRY_FEE);
+
+        // Charlie can use "Player1" in a different group
+        address charlie = makeAddr("charlie");
+        vm.deal(charlie, 1 ether);
+        vm.prank(charlie);
+        betting.createBracket{value: ENTRY_FEE}(
+            predictions,
+            "AnotherGroup",
+            "pass456",
+            "Player1"
+        );
+
+        assertEq(betting.getGroupMemberCount("AnotherGroup", "pass456"), 1);
     }
 }
