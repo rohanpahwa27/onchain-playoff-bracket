@@ -715,7 +715,7 @@ contract SportsBettingTest is Test {
         betting.createGroup("FullGroup", "password123", ENTRY_FEE);
 
         // Create 20 users and have them join the same group
-        for (uint256 i = 0; i < 20; i++) {
+        for (uint256 i = 0; i < 50; i++) {
             address user = makeAddr(
                 string(abi.encodePacked("user", vm.toString(i)))
             );
@@ -729,18 +729,18 @@ contract SportsBettingTest is Test {
             );
         }
 
-        assertEq(betting.getGroupMemberCount("FullGroup", "password123"), 20);
+        assertEq(betting.getGroupMemberCount("FullGroup", "password123"), 50);
 
-        // 21st user should be rejected
-        address user21 = makeAddr("user21");
-        vm.deal(user21, 1 ether);
-        vm.prank(user21);
+        // 51st user should be rejected
+        address user51 = makeAddr("user51");
+        vm.deal(user51, 1 ether);
+        vm.prank(user51);
         vm.expectRevert(SportsBetting.GroupFull.selector);
         betting.createBracket{value: ENTRY_FEE}(
             predictions,
             "FullGroup",
             "password123",
-            "User21"
+            "User51"
         );
     }
 

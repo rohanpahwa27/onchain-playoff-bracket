@@ -4,6 +4,14 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract SportsBetting is Ownable {
+    /* TODO: Add score tiebreakers for Super Bowl. This means when you create a bracket, you store the score for the Super Bowl for each team. If the top scores are tied, it should compare the 
+        Tiebreaker- total points in Super Bowl	
+        Tiebreaker2- point differential in Super Bowl
+        Need to update CreateBracket function to take in the scores for each team.
+        Need to update DeclareWinner function to use the tiebreakers.
+        Need to update DeclareGroupWinner function to use the tiebreakers.	
+    */
+
     // Custom struct to represent a round's predictions
     struct RoundPredictions {
         string[] teams;
@@ -69,7 +77,6 @@ contract SportsBetting is Ownable {
         address winner,
         uint256 score
     );
-    event WinnerDeclared(address winner, uint256 score);
     event BracketDeleted(address indexed user);
     event WinnerRemoved(uint256 indexed round, string teamNum);
 
