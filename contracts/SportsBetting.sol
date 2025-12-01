@@ -378,12 +378,12 @@ contract SportsBetting is Ownable {
             uint256 prize = (groups[groupId].totalPot *
                 (100 - DEVELOPER_FEE_PERCENTAGE)) / 100;
 
-            // Reset group pot before transfer
-            groups[groupId].totalPot = 0;
-
             // Transfer prize to winner
             (bool success, ) = payable(winner).call{value: prize}("");
             require(success, "Transfer failed");
+
+            // Reset group pot after transfer
+            groups[groupId].totalPot = 0;
 
             emit GroupWinnerDeclared(
                 groupId,
@@ -660,22 +660,32 @@ contract SportsBetting is Ownable {
     /**
      * @dev Get group members
      */
+    /**
+     * @dev Get group members
+     */
     function getGroupMembers(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (address[] memory) {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
         return groups[groupId].members;
     }
 
     /**
      * @dev Get group prize pool
      */
+    /**
+     * @dev Get group prize pool
+     */
     function getGroupPrizePool(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
         return
             (groups[groupId].totalPot * (100 - DEVELOPER_FEE_PERCENTAGE)) / 100;
     }
@@ -683,30 +693,47 @@ contract SportsBetting is Ownable {
     /**
      * @dev Get group entry fee
      */
+    /**
+     * @dev Get group entry fee
+     */
     function getGroupEntryFee(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
         return groups[groupId].entryFee;
     }
 
     /**
      * @dev Check if a player has submitted a bracket in a specific group
      */
+    /**
+     * @dev Check if a player has submitted a bracket in a specific group
+     */
     function hasSubmittedGroupBracket(
         address player,
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (bool) {
         bytes32 groupId = _getGroupId(groupName);
-        return groups[groupId].exists && groupHasSubmitted[groupId][player];
+        if (!groups[groupId].exists) return false;
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
+        return groupHasSubmitted[groupId][player];
     }
 
     /**
      * @dev Get all data for a group: users, scores, usernames, and predictions
      */
+    /**
+     * @dev Get all data for a group: users, scores, usernames, and predictions
+     * When brackets are not paused (still accepting entries), only returns users and usernames
+     * When brackets are paused (playoffs started), returns full data including scores and predictions
+     */
     function getGroupData(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     )
         external
         view
@@ -719,7 +746,51 @@ contract SportsBetting is Ownable {
     {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
 
+        // If brackets are not paused, only return users and usernames
+        if (!isBracketCreationPaused) {
+            return _getGroupBasicData(groupId);
+        }
+
+        // If brackets are paused, return full data
+        return _getGroupDataInternal(groupId);
+    }
+
+    /**
+     * @dev Get all data for a group (Owner only, no password required)
+     */
+    function getGroupDataByOwner(
+        string calldata groupName
+    )
+        external
+        view
+        onlyOwner
+        returns (
+            address[] memory users,
+            uint256[] memory scores,
+            string[] memory usernames,
+            string[][][] memory allPredictions
+        )
+    {
+        bytes32 groupId = _getGroupId(groupName);
+        require(groups[groupId].exists, "NoGroup");
+
+        return _getGroupDataInternal(groupId);
+    }
+
+    function _getGroupDataInternal(
+        bytes32 groupId
+    )
+        internal
+        view
+        returns (
+            address[] memory users,
+            uint256[] memory scores,
+            string[] memory usernames,
+            string[][][] memory allPredictions
+        )
+    {
         address[] memory groupMembers = groups[groupId].members;
 
         // Count members who have submitted brackets
@@ -766,6 +837,51 @@ contract SportsBetting is Ownable {
     }
 
     /**
+     * @dev Internal function to get basic group data (users and usernames only)
+     * Used when brackets are not paused to hide scores and predictions
+     */
+    function _getGroupBasicData(
+        bytes32 groupId
+    )
+        internal
+        view
+        returns (
+            address[] memory users,
+            uint256[] memory scores,
+            string[] memory usernames,
+            string[][][] memory allPredictions
+        )
+    {
+        address[] memory groupMembers = groups[groupId].members;
+
+        // Count members who have submitted brackets
+        uint256 submittedCount = 0;
+        for (uint256 i = 0; i < groupMembers.length; i++) {
+            if (groupHasSubmitted[groupId][groupMembers[i]]) {
+                submittedCount++;
+            }
+        }
+
+        users = new address[](submittedCount);
+        usernames = new string[](submittedCount);
+        // Return empty arrays for scores and predictions
+        scores = new uint256[](0);
+        allPredictions = new string[][][](0);
+
+        uint256 index = 0;
+        for (uint256 i = 0; i < groupMembers.length; i++) {
+            address member = groupMembers[i];
+            if (groupHasSubmitted[groupId][member]) {
+                users[index] = member;
+                usernames[index] = groupPlayerUsernames[groupId][member];
+                index++;
+            }
+        }
+
+        return (users, scores, usernames, allPredictions);
+    }
+
+    /**
      * @dev Get max entry fee
      */
     function getMaxEntryFee() external pure returns (uint256) {
@@ -775,11 +891,16 @@ contract SportsBetting is Ownable {
     /**
      * @dev Get number of members in a group
      */
+    /**
+     * @dev Get number of members in a group
+     */
     function getGroupMemberCount(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (uint256) {
         bytes32 groupId = _getGroupId(groupName);
         require(groups[groupId].exists, "NoGroup");
+        if (!_verifyGroupPassword(groupId, password)) revert InvalidPassword();
         return groups[groupId].members.length;
     }
 
@@ -794,7 +915,8 @@ contract SportsBetting is Ownable {
      * @dev Get group info
      */
     function getGroupInfo(
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     )
         external
         view
@@ -809,6 +931,8 @@ contract SportsBetting is Ownable {
         exists = groups[groupId].exists;
 
         if (exists) {
+            if (!_verifyGroupPassword(groupId, password))
+                revert InvalidPassword();
             entryFee = groups[groupId].entryFee;
             memberCount = groups[groupId].members.length;
             isFull = memberCount >= MAX_GROUP_SIZE;
@@ -820,7 +944,8 @@ contract SportsBetting is Ownable {
      */
     function canJoinGroup(
         address player,
-        string calldata groupName
+        string calldata groupName,
+        string calldata password
     ) external view returns (bool) {
         bytes32 groupId = _getGroupId(groupName);
         if (!groups[groupId].exists) return true; // Can create new group

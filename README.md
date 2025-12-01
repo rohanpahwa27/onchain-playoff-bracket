@@ -107,5 +107,5 @@ $ cast --help
 do you see anything wrong with the implementation of @SportsBetting.sol ?
 
 
-I want to allow someone to create a group using an entry fee, league name, league password. any address can join if they know the league name + password and they have tp provide a username. there should be a group leaderboard where you get the scores of each player. you can also get the group's bracket predictions
+I want to allow someone to create a group using an entry fee, league name, league password. any address can join if they know the league name + password and they have tp provide a username. there should be a group leaderboard where you get the scores, preductions of each player by providing the league name + password. when brackets are paused, it should show the predictions + scores. When they're not paused, they should show only the basic data like addresses + names.
 ```

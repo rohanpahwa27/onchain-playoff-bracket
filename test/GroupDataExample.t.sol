@@ -93,13 +93,16 @@ contract GroupDataExample is Test {
         betting.updateWinner(1, "TB");
         betting.updateWinner(1, "LAR");
 
-        // 6. Call getGroupData
+        // 6. Pause brackets to view scores and predictions
+        betting.pauseBracketCreation();
+
+        // 7. Call getGroupData
         (
             address[] memory users,
             uint256[] memory scores,
             string[] memory usernames,
             string[][][] memory allPredictions
-        ) = betting.getGroupData("NFL_Playoffs_2025");
+        ) = betting.getGroupData("NFL_Playoffs_2025", "password123");
 
         // 7. Log Results
         console.log("=== NFL Playoff Group Data ===");
